@@ -25,6 +25,8 @@ btn('Сохранить').click();
 await sleep(600);
 expect(/^#\/landlords\/\d+$/.test(location.hash), 'после сохранения не открылась карточка: ' + location.hash);
 expect(document.querySelector('h2').textContent === 'ООО «Ромашка»', 'заголовок: ' + document.querySelector('h2').textContent);
+expect(message().className === 'ok' && message().textContent === 'Сохранено: ООО «Ромашка»',
+    'после перехода на карточку пропало сообщение: «' + message().textContent + '»');
 expect(document.querySelector('input[name=city]').value === 'г. Химки', 'город не сохранился');
 
 fill({name_short: 'ООО «Ромашка-2»'});

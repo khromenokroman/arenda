@@ -30,10 +30,25 @@ expect(planned.join('; ') === '2026-10-19-500100732259 4; 2027-02-19-50010073225
     'расчёт: ' + planned.join('; '));
 expect((await api('GET', '/api/contracts')).length === 0, 'расчёт записал договоры');
 
+let opened = null;
+window.open = url => { opened = url; };
 btn('Создать договоры').click();
 await sleep(700);
 expect(location.hash === '#/contracts', 'после создания не открылся список: ' + location.hash);
 expect(document.querySelectorAll('table.contracts tbody tr').length === 4, 'в списке не 4 договора');
+expect(document.getElementById('message').textContent === 'Создано договоров: 4', 'сообщение: «' + document.getElementById('message').textContent + '»');
+
+btn('Напечатать созданные (4)').click();
+expect(/^\/print\/contracts\?ids=\d+,\d+,\d+,\d+$/.test(opened), 'печать созданных открыла: ' + opened);
+const batch = await (await fetch(opened)).text();
+expect(batch.includes('<title>Договоры аренды: 4</title>') && batch.includes('№ 2027-06-19-500100732259'), 'печатная форма пачки без договоров');
+log.push('печать созданных: ' + opened);
+
+const picks = [...document.querySelectorAll('input.pick')];
+picks[0].click();
+picks[2].click();
+btn('Печать выбранных (2)').click();
+expect(opened === `/print/contracts?ids=${picks[0].value},${picks[2].value}`, 'печать выбранных открыла: ' + opened);
 const filter = document.getElementById('filter');
 filter.value = 'берёза';
 filter.dispatchEvent(new Event('input'));
@@ -44,6 +59,8 @@ visible[0].querySelector('a').click();
 await sleep(600);
 expect(document.querySelector('h2').textContent === 'Договор 2026-11-01-7707083893', 'заголовок: ' + document.querySelector('h2').textContent);
 await api('PUT', `/api/tenants/${org.id}`, {floor: '3'});
+btn('Печать').click();
+expect(opened === `/print/contracts/${location.hash.split('/').pop()}`, 'печать договора открыла: ' + opened);
 btn('Обновить из карточек').click();
 await sleep(600);
 const floorRow = [...document.querySelectorAll('table.info tr')].find(tr => tr.cells[0].textContent === 'Этаж');
