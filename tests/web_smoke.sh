@@ -32,13 +32,23 @@ call() { curl -sf -X "$1" "$API/$2" -H 'Content-Type: application/json' -d "$3";
 id() { sed -n 's/.*"id":\([0-9]*\).*/\1/p'; }
 
 EMPTY_LIST=$(dump_page landlords)
+EMPTY_TENANTS=$(dump_page tenants)
 LANDLORD=$(call POST landlords '{"name_full":"Общество с ограниченной ответственностью «Ромашка»","name_short":"ООО «Ромашка» <b>","inn":"7707083893"}' | id)
+
+IP=$(call POST tenants '{"kind":"ip","name":"Петров Пётр <b>","gender":"m","inn":"500100732259"}' | id)
+ORG=$(call POST tenants '{"kind":"org","name_full":"ООО «Берёза»","name_short":"ООО «Берёза» <b>"}' | id)
+PERSON=$(call POST tenants '{"kind":"person","name":"Сидорова Анна <b>","gender":"f","birth_date":"1990-05-17"}' | id)
 
 PAGES=(
     ""
     "landlords"
     "landlords/new"
     "landlords/$LANDLORD"
+    "tenants"
+    "tenants/new"
+    "tenants/$IP"
+    "tenants/$ORG"
+    "tenants/$PERSON"
 )
 
 failed=0
@@ -63,6 +73,12 @@ if grep -q 'Арендодателей пока нет' <<<"$EMPTY_LIST"; then
 else
     failed=1
     echo "FAIL  пустая база: нет надписи «Арендодателей пока нет»"
+fi
+if grep -q 'Арендаторов пока нет' <<<"$EMPTY_TENANTS"; then
+    echo "ok    пустая база: список арендаторов пуст"
+else
+    failed=1
+    echo "FAIL  пустая база: нет надписи «Арендаторов пока нет»"
 fi
 for page in "${PAGES[@]}"; do
     check "$page" "$(dump_page "$page")"

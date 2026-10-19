@@ -16,6 +16,7 @@ export CHROME=${CHROME:-$(command -v chromium || command -v google-chrome || tru
 # сценарий и адрес, с которого он начинается
 SCENARIOS=(
     "landlords.js|#/landlords"
+    "tenants.js|#/tenants/new"
 )
 
 failed=0
