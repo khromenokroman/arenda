@@ -3,6 +3,7 @@
 #include <string>
 
 #include "db.hpp"
+#include "landlords.hpp"
 
 namespace httplib {
 class Server;
@@ -34,6 +35,9 @@ class Api {
      */
     [[nodiscard]] Handler guarded(Handler handler);
 
+    void register_landlords(httplib::Server &server);
+
     std::string m_web_dir;
+    Landlords m_landlords;
     Database &m_db;
 };

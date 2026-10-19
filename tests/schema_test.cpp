@@ -30,7 +30,7 @@ TEST(Schema, MigratesEmptyDatabase) {
     ASSERT_EQ(current_schema_version(db), 0) << "новая база должна быть пустой";
     EXPECT_EQ(migrate(db), schema_version());
     EXPECT_EQ(current_schema_version(db), schema_version()) << "user_version после миграции";
-    EXPECT_THAT(table_names(db), testing::IsSupersetOf({"settings"}));
+    EXPECT_THAT(table_names(db), testing::IsSupersetOf({"settings", "landlords"}));
 }
 
 /**

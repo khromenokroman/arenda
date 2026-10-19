@@ -8,12 +8,38 @@
 namespace {
 
 /// Миграции схемы. Применённую миграцию не менять: изменения только новой миграцией в конце.
-constexpr std::array<std::string_view, 1> MIGRATIONS = {
+constexpr std::array<std::string_view, 2> MIGRATIONS = {
     // 1: настройки ключ - значение
     R"sql(
 CREATE TABLE settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
+);
+)sql",
+    // 2: арендодатели; поля описаны в Landlords::specs()
+    R"sql(
+CREATE TABLE landlords (
+    id               INTEGER PRIMARY KEY,
+    name_full        TEXT NOT NULL,
+    name_short       TEXT NOT NULL UNIQUE,
+    ogrn             TEXT NOT NULL DEFAULT '',
+    inn              TEXT NOT NULL DEFAULT '',
+    kpp              TEXT NOT NULL DEFAULT '',
+    address          TEXT NOT NULL DEFAULT '',
+    phone            TEXT NOT NULL DEFAULT '',
+    signer_post      TEXT NOT NULL DEFAULT '',
+    signer_post_gen  TEXT NOT NULL DEFAULT '',
+    signer_name      TEXT NOT NULL DEFAULT '',
+    signer_name_gen  TEXT NOT NULL DEFAULT '',
+    signer_basis_gen TEXT NOT NULL DEFAULT '',
+    account          TEXT NOT NULL DEFAULT '',
+    bank             TEXT NOT NULL DEFAULT '',
+    bik              TEXT NOT NULL DEFAULT '',
+    object_name_gen  TEXT NOT NULL DEFAULT '',
+    object_address   TEXT NOT NULL DEFAULT '',
+    city             TEXT NOT NULL DEFAULT '',
+    region_gen       TEXT NOT NULL DEFAULT '',
+    municipality_gen TEXT NOT NULL DEFAULT ''
 );
 )sql",
 };

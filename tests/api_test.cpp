@@ -114,3 +114,76 @@ TEST(Api, MissingWebDirFails) {
         EXPECT_THAT(std::string(e.what()), HasSubstr("/nonexistent/arenda-web"));
     }
 }
+
+/**
+ * @brief Арендодатели через HTTP: описание полей, создание, список, изменение, удаление.
+ */
+TEST(Api, LandlordsCrud) {
+    TestServer srv;
+    auto cli = srv.client();
+    constexpr char const JSON[] = "application/json";
+
+    auto res = cli.Get("/api/landlords/fields");
+    ASSERT_TRUE(res) << "нет ответа: " << httplib::to_string(res.error());
+    auto const specs = nlohmann::json::parse(res->body);
+    ASSERT_TRUE(specs.is_array() && !specs.empty()) << res->body;
+    EXPECT_EQ(specs[0].at("key"), "name_full") << res->body;
+    EXPECT_EQ(specs[0].at("required"), true) << res->body;
+
+    res = cli.Post("/api/landlords", R"({"name_full": "ООО «Ромашка»", "name_short": "Ромашка", "inn": "7707083893"})", JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 201) << res->body;
+    auto const created = nlohmann::json::parse(res->body);
+    auto const id = created.at("id").get<std::int64_t>();
+    EXPECT_EQ(created.at("inn"), "7707083893") << res->body;
+    EXPECT_EQ(created.at("city"), "") << "все поля в ответе: " << res->body;
+
+    res = cli.Put("/api/landlords/" + std::to_string(id), R"({"id": 999, "city": "г. Химки"})", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200) << res->body;
+    EXPECT_EQ(nlohmann::json::parse(res->body).at("city"), "г. Химки") << "id в теле игнорируется: " << res->body;
+
+    res = cli.Get("/api/landlords");
+    ASSERT_TRUE(res);
+    auto const list = nlohmann::json::parse(res->body);
+    ASSERT_EQ(list.size(), 1U) << res->body;
+    EXPECT_EQ(list[0].at("id"), id);
+
+    res = cli.Delete("/api/landlords/" + std::to_string(id));
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 204) << res->body;
+    res = cli.Get("/api/landlords/" + std::to_string(id));
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404) << res->body;
+}
+
+/**
+ * @brief Неверные запросы к арендодателям: 400 или 404 с текстом причины в JSON.
+ */
+TEST(Api, LandlordsErrors) {
+    TestServer srv;
+    auto cli = srv.client();
+    constexpr char const JSON[] = "application/json";
+    struct Case {
+        std::string method;
+        std::string path;
+        std::string body;
+        int status;
+        std::string reason;
+    };
+    std::vector<Case> const cases = {
+        {"POST", "/api/landlords", "не json", 400, "не JSON"},
+        {"POST", "/api/landlords", "[]", 400, "JSON-объектом"},
+        {"POST", "/api/landlords", R"({"name_full": "А", "name_short": 5})", 400, "поле name_short должно быть строкой"},
+        {"POST", "/api/landlords", R"({"name_full": "А", "name_short": "Б", "inn": "123"})", 400, "ИНН организации должен состоять из 10 цифр"},
+        {"PUT", "/api/landlords/77", R"({"city": "х"})", 404, "нет арендодателя с id 77"},
+        {"GET", "/api/landlords/abc", "", 404, "неверный id: abc"},
+    };
+    for (auto const &c : cases) {
+        SCOPED_TRACE(c.method + " " + c.path + " " + c.body);
+        auto const res = c.method == "POST" ? cli.Post(c.path, c.body, JSON) : c.method == "PUT" ? cli.Put(c.path, c.body, JSON) : cli.Get(c.path);
+        ASSERT_TRUE(res) << "нет ответа";
+        EXPECT_EQ(res->status, c.status) << res->body;
+        EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr(c.reason));
+    }
+}
