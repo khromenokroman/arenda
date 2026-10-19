@@ -1,0 +1,34 @@
+#!/bin/sh
+# Пользователь службы, каталог базы, права файла настроек с ключом DaData, включение и (пере)запуск службы.
+set -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent passwd arenda >/dev/null; then
+        adduser --system --group --quiet --home /var/lib/arenda --no-create-home arenda
+    fi
+    install -d -o arenda -g arenda -m 0750 /var/lib/arenda
+    # в настройках ключ DaData: читает только root (systemd читает EnvironmentFile от root)
+    if [ -f /etc/default/arenda ]; then
+        chown root:root /etc/default/arenda
+        chmod 0640 /etc/default/arenda
+    fi
+fi
+
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
+    # как dh_installsystemd: служба включается при установке, выключенная администратором - остаётся выключенной
+    deb-systemd-helper unmask arenda.service >/dev/null || true
+    if deb-systemd-helper --quiet was-enabled arenda.service; then
+        deb-systemd-helper enable arenda.service >/dev/null || true
+    else
+        deb-systemd-helper update-state arenda.service >/dev/null || true
+    fi
+    if [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload >/dev/null || true
+        if [ -n "$2" ]; then
+            deb-systemd-invoke restart arenda.service >/dev/null
+        else
+            deb-systemd-invoke start arenda.service >/dev/null
+        fi
+    fi
+fi
+exit 0

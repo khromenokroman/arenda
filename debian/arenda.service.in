@@ -1,0 +1,23 @@
+[Unit]
+Description=Договоры аренды: веб-сервер
+Documentation=https://github.com/khromenokroman/arenda
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=arenda
+Group=arenda
+EnvironmentFile=-@CMAKE_INSTALL_FULL_SYSCONFDIR@/default/arenda
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/arenda --db /var/lib/arenda/arenda.db --web @ARENDA_WEB_DIR@ $ARENDA_OPTS
+Restart=on-failure
+StateDirectory=arenda
+StateDirectoryMode=0750
+UMask=0027
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+
+[Install]
+WantedBy=multi-user.target

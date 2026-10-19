@@ -1,0 +1,15 @@
+#!/bin/sh
+# Снятие службы. База /var/lib/arenda и пользователь arenda остаются и при purge: это договоры.
+set -e
+
+if [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null || true
+fi
+if [ "$1" = "remove" ]; then
+    deb-systemd-helper mask arenda.service >/dev/null || true
+fi
+if [ "$1" = "purge" ]; then
+    deb-systemd-helper purge arenda.service >/dev/null || true
+    deb-systemd-helper unmask arenda.service >/dev/null || true
+fi
+exit 0
