@@ -10,7 +10,7 @@ const message = () => document.getElementById('message');
 document.querySelector('a.button').click();
 await sleep(500);
 expect(location.hash === '#/landlords/new', 'не открылась форма: ' + location.hash);
-expect(document.querySelectorAll('form.card fieldset').length === 5, 'разделов формы: ' + document.querySelectorAll('form.card fieldset').length);
+expect(document.querySelectorAll('form.card fieldset').length === 6, 'разделов формы: ' + document.querySelectorAll('form.card fieldset').length);
 expect(document.querySelector('input[name=contract_limit]').value === '100 000', 'нет порога по умолчанию в новой карточке');
 
 fill({name_full: 'Общество с ограниченной ответственностью «Ромашка»', name_short: 'ООО «Ромашка»', inn: '7707083894'});

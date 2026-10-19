@@ -66,3 +66,21 @@ TEST(Schema, LandlordTermsDefaultsForOldRows) {
     EXPECT_EQ(stmt.column_text(2), "11");
     EXPECT_EQ(stmt.column_text(3), "с 09:00 до 18:00");
 }
+
+/**
+ * @brief Миграция 8: у существующих арендодателей пени и штрафы п. 5.1 из образца договора.
+ */
+TEST(Schema, LandlordFinesDefaultsForOldRows) {
+    Database db{":memory:"};
+    migrate(db, 7);
+    db.exec("INSERT INTO landlords (name_full, name_short) VALUES ('ООО «Старое»', 'Старое')");
+    migrate(db);
+    auto stmt = db.prepare("SELECT penalty_rent_pct, penalty_return_pct, fine_sign, fine_control, fine_transfer, fine_waste FROM landlords");
+    ASSERT_TRUE(stmt.step());
+    EXPECT_EQ(stmt.column_text(0), "0,3");
+    EXPECT_EQ(stmt.column_text(1), "0,5");
+    EXPECT_EQ(stmt.column_text(2), "2 000");
+    EXPECT_EQ(stmt.column_text(3), "500");
+    EXPECT_EQ(stmt.column_text(4), "2 000");
+    EXPECT_EQ(stmt.column_text(5), "2 000");
+}

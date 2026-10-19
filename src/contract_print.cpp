@@ -64,6 +64,22 @@ std::string rubles_short(std::string const &text) {
     }
 }
 
+/// Процент из карточки («0,3», «0,50») для текста: «0,3», «0,5», «1»; неразборчивое - как есть.
+std::string percent_short(std::string const &text) {
+    try {
+        auto formatted = numbers::format_hundredths(numbers::parse_hundredths(text, "процент"));
+        while (formatted.ends_with('0')) {
+            formatted.pop_back();
+        }
+        if (formatted.ends_with(',')) {
+            formatted.pop_back();
+        }
+        return formatted;
+    } catch (UserError const &) {
+        return text;
+    }
+}
+
 /// «действующего» или «действующей» по отчеству подписанта.
 std::string acting(std::string const &signer_name) { return names::gender_by_patronymic(signer_name) == 'f' ? "действующей" : "действующего"; }
 
@@ -204,6 +220,12 @@ Values values(Contract const &c) {
         {"municipality_gen", field(l, "municipality_gen")},
         {"rent_words", words::rubles(c.rent_kop)},
         {"fire_fine", rubles_short(field(l, "fire_fine"))},
+        {"fine_sign", rubles_short(field(l, "fine_sign"))},
+        {"fine_control", rubles_short(field(l, "fine_control"))},
+        {"fine_transfer", rubles_short(field(l, "fine_transfer"))},
+        {"fine_waste", rubles_short(field(l, "fine_waste"))},
+        {"penalty_rent_pct", percent_short(field(l, "penalty_rent_pct"))},
+        {"penalty_return_pct", percent_short(field(l, "penalty_return_pct"))},
         {"total_power", numbers::format_hundredths(total_power(c.equipment))},
     };
     v.html = {

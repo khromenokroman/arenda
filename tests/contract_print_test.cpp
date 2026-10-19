@@ -44,7 +44,13 @@ Contract sample(Fields tenant) {
                   {"hours_weekdays", "с 10:00 до 20:00"},
                   {"hours_weekends", "с 10:00 до 18:00"},
                   {"days_off", "1 января"},
-                  {"fire_fine", "7000"}};
+                  {"fire_fine", "7000"},
+                  {"penalty_rent_pct", "0,25"},
+                  {"penalty_return_pct", "1,00"},
+                  {"fine_sign", "3000"},
+                  {"fine_control", "750,50"},
+                  {"fine_transfer", "4 000"},
+                  {"fine_waste", "2500"}};
     tenant.emplace("area", "12,5");
     tenant.emplace("floor", "2");
     tenant.emplace("activity_gen", "металлоремонта");
@@ -80,6 +86,12 @@ TEST(ContractPrint, IndividualEntrepreneur) {
     EXPECT_THAT(html, HasSubstr("на 2 этаже торгового центра «Ромашка» (далее — «Универмаг», «Объект»)"));
     EXPECT_THAT(html, HasSubstr("необходимые для металлоремонта, только из перечня, согласованного с Арендодателем (Приложение № 1)"));
     EXPECT_THAT(html, HasSubstr("штрафа 7 000 рублей."));
+    EXPECT_THAT(html, HasSubstr("5.1.1. При просрочке внесения арендной платы — пеней в размере 0,25% от суммы задолженности"));
+    EXPECT_THAT(html, HasSubstr("пеней в размере 1% от месячной арендной платы")) << "незначащие нули у процента убираются";
+    EXPECT_THAT(html, HasSubstr("без согласия Арендодателя — штрафа 3 000 рублей."));
+    EXPECT_THAT(html, HasSubstr("содержанием Помещения — штрафа 750,50 рублей."));
+    EXPECT_THAT(html, HasSubstr("третьим лицам без согласия Арендодателя — штрафа 4 000 рублей."));
+    EXPECT_THAT(html, HasSubstr("(п. 2.2.5) — штрафа 2 500 рублей."));
     EXPECT_THAT(html, HasSubstr("Арбитражный суд Московской области"));
     EXPECT_THAT(html, HasSubstr("понедельник — пятница: с 10:00 до 20:00"));
     EXPECT_THAT(html, HasSubstr("Директор ____________ / М. П. Иванова /"));

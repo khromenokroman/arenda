@@ -14,6 +14,7 @@ constexpr std::string_view ORG = "Организация";
 constexpr std::string_view SIGNER = "Подписант";
 constexpr std::string_view BANK = "Банк";
 constexpr std::string_view OBJECT = "Объект аренды";
+constexpr std::string_view FINES = "Ответственность арендатора (п. 5.1)";
 constexpr std::string_view TERMS = "Условия договоров";
 
 constexpr std::size_t LONG_TEXT = 1000;
@@ -21,6 +22,14 @@ constexpr std::size_t LONG_TEXT = 1000;
 void check_rubles(std::string const &text) {
     if (numbers::parse_hundredths(text, "сумма") <= 0) {
         throw UserError("сумма должна быть больше нуля: «" + text + "»");
+    }
+}
+
+/// Пени в процентах в день: больше нуля и не больше 100.
+void check_percent(std::string const &text) {
+    auto const value = numbers::parse_hundredths(text, "процент");
+    if (value <= 0 || value > std::int64_t{100} * 100) {
+        throw UserError("процент должен быть больше нуля и не больше 100: «" + text + "»");
     }
 }
 
@@ -69,13 +78,55 @@ constexpr std::array SPECS = {
               .hint = "с 09:00 до 16:00",
               .default_value = "с 09:00 до 16:00"},
     FieldSpec{.key = "days_off", .label = "Нерабочие дни", .group = OBJECT, .hint = "1 и 2 января, Пасха", .default_value = "1 и 2 января, Пасха"},
+    FieldSpec{.key = "penalty_rent_pct",
+              .label = "Пени за просрочку арендной платы (п. 5.1.1), % в день",
+              .group = FINES,
+              .hint = "0,3",
+              .check = check_percent,
+              .required = true,
+              .default_value = "0,3"},
+    FieldSpec{.key = "penalty_return_pct",
+              .label = "Пени за несвоевременный возврат помещения (п. 5.1.2), % в день",
+              .group = FINES,
+              .hint = "0,5",
+              .check = check_percent,
+              .required = true,
+              .default_value = "0,5"},
+    FieldSpec{.key = "fine_sign",
+              .label = "Штраф за вывеску или рекламу без согласия (п. 5.1.3), руб.",
+              .group = FINES,
+              .hint = "2 000",
+              .check = check_rubles,
+              .required = true,
+              .default_value = "2 000"},
+    FieldSpec{.key = "fine_control",
+              .label = "Штраф за воспрепятствование контролю (п. 5.1.4), руб.",
+              .group = FINES,
+              .hint = "500",
+              .check = check_rubles,
+              .required = true,
+              .default_value = "500"},
+    FieldSpec{.key = "fine_transfer",
+              .label = "Штраф за передачу помещения третьим лицам (п. 5.1.6), руб.",
+              .group = FINES,
+              .hint = "2 000",
+              .check = check_rubles,
+              .required = true,
+              .default_value = "2 000"},
     FieldSpec{.key = "fire_fine",
               .label = "Штраф за нарушение пожарной безопасности (п. 5.1.7), руб.",
-              .group = TERMS,
+              .group = FINES,
               .hint = "5 000",
               .check = check_rubles,
               .required = true,
               .default_value = "5 000"},
+    FieldSpec{.key = "fine_waste",
+              .label = "Штраф за отсутствие договора на вывоз отходов (п. 5.1.8), руб.",
+              .group = FINES,
+              .hint = "2 000",
+              .check = check_rubles,
+              .required = true,
+              .default_value = "2 000"},
     FieldSpec{.key = "contract_limit",
               .label = "Наибольшая сумма одного договора, руб.",
               .group = TERMS,

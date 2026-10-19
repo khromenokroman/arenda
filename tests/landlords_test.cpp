@@ -161,3 +161,21 @@ TEST_F(LandlordsTest, Terms) {
     m_landlords.update(id, {{"contract_limit", "150000,50"}});
     EXPECT_EQ(m_landlords.get(id).fields.at("contract_limit"), "150000,50");
 }
+
+/**
+ * @brief Пени и штрафы п. 5.1: значения из образца по умолчанию, проценты от 0 до 100.
+ */
+TEST_F(LandlordsTest, Fines) {
+    auto const id = m_landlords.create(sample());
+    auto const got = m_landlords.get(id).fields;
+    EXPECT_EQ(got.at("penalty_rent_pct"), "0,3");
+    EXPECT_EQ(got.at("penalty_return_pct"), "0,5");
+    EXPECT_EQ(got.at("fine_sign"), "2 000");
+    EXPECT_EQ(got.at("fine_control"), "500");
+    EXPECT_EQ(got.at("fine_transfer"), "2 000");
+    EXPECT_EQ(got.at("fine_waste"), "2 000");
+    EXPECT_THROW_REASON(m_landlords.update(id, {{"penalty_rent_pct", "0"}}), UserError, "процент должен быть больше нуля");
+    EXPECT_THROW_REASON(m_landlords.update(id, {{"penalty_rent_pct", "150"}}), UserError, "не больше 100");
+    EXPECT_THROW_REASON(m_landlords.update(id, {{"fine_control", "-1"}}), UserError, "нужно число");
+    EXPECT_NO_THROW(m_landlords.update(id, {{"penalty_rent_pct", "0,25"}, {"fine_control", "1000"}}));
+}
