@@ -34,6 +34,17 @@ class TestServer {
         while (!m_server.is_running()) {
             std::this_thread::sleep_for(std::chrono::milliseconds{1});
         }
+        // первый пользователь - администратор; его сессия уходит со всеми запросами client()
+        auto const res = anonymous().Post("/api/auth/setup", R"({"login": "admin", "name": "Админ", "password": "secret1"})", "application/json");
+        if (res && res->status == 201) {
+            m_cookie = cookie_of(*res);
+        }
+    }
+
+    /// Пара "arenda_session=..." из Set-Cookie ответа.
+    static std::string cookie_of(httplib::Response const &res) {
+        auto const header = res.get_header_value("Set-Cookie");
+        return header.substr(0, header.find(';'));
     }
 
     ~TestServer() {
@@ -46,13 +57,25 @@ class TestServer {
     TestServer(TestServer &&) = delete;
     TestServer &operator=(TestServer &&) = delete;
 
-    [[nodiscard]] httplib::Client client() const { return httplib::Client{"127.0.0.1", m_port}; }
+    /// Клиент с сессией администратора.
+    [[nodiscard]] httplib::Client client() const { return client_as(m_cookie); }
+
+    /// Клиент с заданной cookie сессии.
+    [[nodiscard]] httplib::Client client_as(std::string const &cookie) const {
+        httplib::Client cli{"127.0.0.1", m_port};
+        cli.set_default_headers({{"Cookie", cookie}});
+        return cli;
+    }
+
+    /// Клиент без входа.
+    [[nodiscard]] httplib::Client anonymous() const { return httplib::Client{"127.0.0.1", m_port}; }
 
    private:
     httplib::Server m_server;
     Database m_db;
     std::unique_ptr<Api> m_api;
     std::thread m_thread;
+    std::string m_cookie;
     int m_port = 0;
 };
 
@@ -446,4 +469,75 @@ TEST(Api, Print) {
     res = cli.Get("/print/contracts/999");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 404) << res->body;
+}
+
+/**
+ * @brief Без входа доступны только версия, состояние входа и вход; данные и печать отвечают 401.
+ */
+TEST(Api, LoginRequired) {
+    TestServer srv;
+    auto cli = srv.anonymous();
+    for (auto const *path :
+         {"/api/landlords", "/api/tenants", "/api/contracts", "/api/users", "/print/contracts?ids=1", "/api/lookup/bank?bik=044525225"}) {
+        SCOPED_TRACE(path);
+        auto const res = cli.Get(path);
+        ASSERT_TRUE(res);
+        EXPECT_EQ(res->status, 401) << res->body;
+        EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr("нужно войти"));
+    }
+    auto res = cli.Get("/api/version");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    res = cli.Get("/api/auth");
+    ASSERT_TRUE(res);
+    auto const state = nlohmann::json::parse(res->body);
+    EXPECT_EQ(state.at("setup"), false) << "администратор уже создан: " << res->body;
+    EXPECT_TRUE(state.at("user").is_null());
+    res = cli.Post("/api/auth/setup", R"({"login": "second", "password": "secret1"})", "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << "второй раз первого администратора не создать: " << res->body;
+}
+
+/**
+ * @brief Вход, выход, пользователь без прав администратора, смена пароля.
+ */
+TEST(Api, LoginLogoutAndRoles) {
+    TestServer srv;
+    constexpr char const JSON[] = "application/json";
+    auto res = srv.client().Post("/api/users", R"({"login": "olga", "name": "Ольга", "password": "secret2"})", JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 201) << res->body;
+    EXPECT_EQ(nlohmann::json::parse(res->body).at("role"), "user");
+
+    res = srv.anonymous().Post("/api/auth/login", R"({"login": "olga", "password": "wrong!"})", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+    EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr("неверный логин или пароль"));
+
+    res = srv.anonymous().Post("/api/auth/login", R"({"login": "OLGA", "password": "secret2"})", JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << "логин без учёта регистра: " << res->body;
+    auto const olga = TestServer::cookie_of(*res);
+    EXPECT_THAT(res->get_header_value("Set-Cookie"), HasSubstr("HttpOnly"));
+
+    res = srv.client_as(olga).Get("/api/landlords");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200) << "пользователю доступны справочники";
+    res = srv.client_as(olga).Get("/api/users");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 403) << res->body;
+    EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr("это делает администратор"));
+
+    res = srv.client_as(olga).Put("/api/auth/password", R"({"old_password": "secret2", "password": "secret3"})", JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    auto const renewed = TestServer::cookie_of(*res);
+    res = srv.client_as(olga).Get("/api/landlords");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401) << "смена пароля закрывает прежние сессии";
+    res = srv.client_as(renewed).Post("/api/auth/logout", "", JSON);
+    ASSERT_TRUE(res);
+    res = srv.client_as(renewed).Get("/api/landlords");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401) << "после выхода сессия закрыта";
 }

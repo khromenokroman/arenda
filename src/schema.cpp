@@ -8,7 +8,7 @@
 namespace {
 
 /// Миграции схемы. Применённую миграцию не менять: изменения только новой миграцией в конце.
-constexpr std::array<std::string_view, 6> MIGRATIONS = {
+constexpr std::array<std::string_view, 7> MIGRATIONS = {
     // 1: настройки ключ - значение
     R"sql(
 CREATE TABLE settings (
@@ -119,6 +119,22 @@ CREATE TABLE contracts (
 );
 CREATE INDEX contracts_tenant ON contracts (tenant_id);
 CREATE INDEX contracts_landlord ON contracts (landlord_id);
+)sql",
+    // 7: пользователи (пароль PBKDF2) и сессии по хешу токена
+    R"sql(
+CREATE TABLE users (
+    id        INTEGER PRIMARY KEY,
+    login     TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    name      TEXT    NOT NULL DEFAULT '',
+    pass_hash TEXT    NOT NULL,
+    role      TEXT    NOT NULL CHECK (role IN ('admin', 'user')),
+    blocked   INTEGER NOT NULL DEFAULT 0 CHECK (blocked IN (0, 1))
+);
+CREATE TABLE sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    expires    TEXT    NOT NULL
+);
 )sql",
 };
 

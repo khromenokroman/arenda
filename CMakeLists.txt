@@ -52,6 +52,7 @@ add_library(${PROJECT_NAME}-core STATIC
         src/requisites.cpp
         src/schema.cpp
         src/tenants.cpp
+        src/users.cpp
 )
 target_include_directories(${PROJECT_NAME}-core PUBLIC src)
 target_compile_definitions(${PROJECT_NAME}-core PUBLIC
@@ -87,6 +88,7 @@ if (BUILD_TESTS)
             tests/requisites_test.cpp
             tests/schema_test.cpp
             tests/tenants_test.cpp
+            tests/users_test.cpp
     )
     target_link_libraries(${PROJECT_NAME}-tests PRIVATE ${PROJECT_NAME}-core GTest::gtest_main GTest::gmock)
     include(GoogleTest)

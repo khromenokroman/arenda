@@ -104,3 +104,8 @@ div.actions { display: flex; gap: 8px; flex-wrap: wrap; }
     table.list.contracts tr { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); }
     table.list.contracts td { border: none; }
 }
+
+#account { margin-left: auto; display: flex; gap: 12px; align-items: baseline; color: var(--muted); }
+#account a { color: var(--accent); text-decoration: none; }
+form.login { max-width: 520px; }
+table.users td.actions { display: flex; gap: 6px; flex-wrap: wrap; }

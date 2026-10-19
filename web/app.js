@@ -8,6 +8,12 @@ async function api(method, path, body) {
         body: body === undefined ? undefined : JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && !path.startsWith('/api/auth')) {
+        // сессия истекла или закрыта: снова форма входа, после входа та же страница
+        currentUser = null;
+        renderLogin();
+        throw new Error(data.error || 'нужно войти');
+    }
     if (!res.ok) {
         throw new Error(data.error || `ошибка ${res.status}`);
     }
@@ -26,11 +32,15 @@ function showMessage(text, isError = true) {
     box.className = text ? (isError ? 'error' : 'ok') : 'hidden';
 }
 
-/** Разделы меню: адрес после #/ и заголовок. */
+/** Вошедший пользователь {id, login, name, role} или null. */
+let currentUser = null;
+
+/** Разделы меню: адрес после #/ и заголовок; admin - только для администратора. */
 const MENU = [
     {path: 'contracts', title: 'Договоры'},
     {path: 'landlords', title: 'Арендодатели'},
     {path: 'tenants', title: 'Арендаторы'},
+    {path: 'users', title: 'Пользователи', admin: true},
 ];
 
 /** Страницы: шаблон адреса и функция отрисовки, параметры из адреса передаются по порядку. */
@@ -42,6 +52,8 @@ const ROUTES = [
     {re: /^landlords\/(new|\d+)$/, render: renderLandlord},
     {re: /^tenants$/, render: renderTenants},
     {re: /^tenants\/(new|\d+)$/, render: renderTenant},
+    {re: /^users$/, render: renderUsers},
+    {re: /^password$/, render: renderPassword},
 ];
 
 let landlordSpecs = null;
@@ -575,10 +587,23 @@ async function renderContract(page, idText) {
 }
 
 async function render() {
+    if (!currentUser) {
+        return;
+    }
     const path = location.hash.replace(/^#\/?/, '') || MENU[0].path;
     document.getElementById('menu').innerHTML = MENU
+        .filter(m => !m.admin || currentUser.role === 'admin')
         .map(m => `<a href="#/${m.path}"${path.split('/')[0] === m.path ? ' class="active"' : ''}>${m.title}</a>`)
         .join('');
+    document.getElementById('account').innerHTML = `<span>${esc(currentUser.name || currentUser.login)}</span>
+        <a href="#/password">Пароль</a> <a href="#" id="logout">Выйти</a>`;
+    document.getElementById('logout').addEventListener('click', async event => {
+        event.preventDefault();
+        await api('POST', '/api/auth/logout');
+        currentUser = null;
+        history.replaceState(null, '', location.pathname);
+        renderLogin();
+    });
     const page = document.getElementById('page');
     const route = ROUTES.find(r => r.re.test(path));
     if (!route) {
@@ -588,9 +613,132 @@ async function render() {
     try {
         await route.render(page, ...path.match(route.re).slice(1));
     } catch (e) {
-        page.innerHTML = '<h2>Ошибка</h2>';
-        showMessage(e.message);
+        if (currentUser) {
+            page.innerHTML = '<h2>Ошибка</h2>';
+            showMessage(e.message);
+        }
     }
+}
+
+/** Форма входа или создания первого администратора вместо приложения. */
+function renderLogin(setup = false) {
+    document.getElementById('menu').innerHTML = '';
+    document.getElementById('account').innerHTML = '';
+    const page = document.getElementById('page');
+    page.innerHTML = `<h2>${setup ? 'Первый запуск: создайте администратора' : 'Вход'}</h2>
+        <form class="card login">
+            ${setup ? '<p class="muted">Администратор заводит остальных пользователей. Пароль не короче 6 символов.</p>' : ''}
+            <label><span>Логин</span><input name="login" autocomplete="username" required></label>
+            ${setup ? '<label><span>Имя</span><input name="name" placeholder="как показывать в программе"></label>' : ''}
+            <label><span>Пароль</span><input name="password" type="password" autocomplete="${setup ? 'new-password' : 'current-password'}" required></label>
+            ${setup ? '<label><span>Пароль ещё раз</span><input name="password2" type="password" autocomplete="new-password" required></label>' : ''}
+            <div class="actions"><button type="submit">${setup ? 'Создать администратора' : 'Войти'}</button></div>
+        </form>`;
+    const form = page.querySelector('form');
+    form.querySelector('[name=login]').focus();
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const body = Object.fromEntries(new FormData(form));
+        if (setup && body.password !== body.password2) {
+            showMessage('пароли не совпадают');
+            return;
+        }
+        delete body.password2;
+        try {
+            const {user} = await api('POST', setup ? '/api/auth/setup' : '/api/auth/login', body);
+            currentUser = user;
+            showMessage('');
+            render();
+        } catch (e) {
+            showMessage(e.message);
+        }
+    });
+}
+
+async function renderUsers(page) {
+    const users = await api('GET', '/api/users');
+    const rows = users.map(u => `<tr data-id="${u.id}">
+            <td>${esc(u.login)}</td><td>${esc(u.name)}</td>
+            <td>${u.role === 'admin' ? 'администратор' : 'пользователь'}</td>
+            <td>${u.blocked ? 'заблокирован' : 'действует'}</td>
+            <td class="actions">
+                <button type="button" data-act="role">${u.role === 'admin' ? 'Сделать пользователем' : 'Сделать администратором'}</button>
+                <button type="button" data-act="block">${u.blocked ? 'Разблокировать' : 'Заблокировать'}</button>
+                <button type="button" data-act="password">Новый пароль</button>
+            </td>
+        </tr>`).join('');
+    page.innerHTML = `<h2>Пользователи</h2>
+        <table class="list users"><thead><tr><th>Логин</th><th>Имя</th><th>Роль</th><th>Состояние</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table>
+        <h3>Новый пользователь</h3>
+        <form class="card">
+            <label><span>Логин *</span><input name="login" autocomplete="off" required></label>
+            <label><span>Имя</span><input name="name"></label>
+            <label><span>Пароль *</span><input name="password" type="password" autocomplete="new-password" required></label>
+            <label><span>Роль</span><select name="role"><option value="user">пользователь</option><option value="admin">администратор</option></select></label>
+            <div class="actions"><button type="submit">Добавить</button></div>
+        </form>`;
+    page.querySelector('form').addEventListener('submit', async event => {
+        event.preventDefault();
+        try {
+            const user = await api('POST', '/api/users', Object.fromEntries(new FormData(event.target)));
+            await renderUsers(page);
+            showMessage(`Добавлен пользователь ${user.login}`, false);
+        } catch (e) {
+            showMessage(e.message);
+        }
+    });
+    page.querySelector('table.users').addEventListener('click', async event => {
+        const button = event.target.closest('button[data-act]');
+        if (!button) {
+            return;
+        }
+        const user = users.find(u => String(u.id) === button.closest('tr').dataset.id);
+        let body;
+        if (button.dataset.act === 'role') {
+            body = {role: user.role === 'admin' ? 'user' : 'admin'};
+        } else if (button.dataset.act === 'block') {
+            body = {blocked: !user.blocked};
+        } else {
+            const password = prompt(`Новый пароль для ${user.login} (не короче 6 символов)`);
+            if (!password) {
+                return;
+            }
+            body = {password};
+        }
+        try {
+            await api('PUT', `/api/users/${user.id}`, body);
+            await renderUsers(page);
+            showMessage(`Изменён пользователь ${user.login}`, false);
+        } catch (e) {
+            showMessage(e.message);
+        }
+    });
+}
+
+async function renderPassword(page) {
+    page.innerHTML = `<h2>Смена пароля</h2>
+        <form class="card">
+            <label><span>Текущий пароль</span><input name="old_password" type="password" autocomplete="current-password" required></label>
+            <label><span>Новый пароль</span><input name="password" type="password" autocomplete="new-password" required></label>
+            <label><span>Новый пароль ещё раз</span><input name="password2" type="password" autocomplete="new-password" required></label>
+            <div class="actions"><button type="submit">Сменить пароль</button></div>
+        </form>`;
+    page.querySelector('form').addEventListener('submit', async event => {
+        event.preventDefault();
+        const body = Object.fromEntries(new FormData(event.target));
+        if (body.password !== body.password2) {
+            showMessage('пароли не совпадают');
+            return;
+        }
+        try {
+            await api('PUT', '/api/auth/password', {old_password: body.old_password, password: body.password});
+            event.target.reset();
+            showMessage('Пароль изменён. На других устройствах нужно войти заново.', false);
+        } catch (e) {
+            showMessage(e.message);
+        }
+    });
 }
 
 async function showVersion() {
@@ -617,5 +765,22 @@ window.addEventListener('hashchange', () => {
     pendingMessage = null;
     render();
 });
-render();
+/** Запуск: первый администратор, вход или приложение. */
+async function start() {
+    try {
+        const auth = await api('GET', '/api/auth');
+        currentUser = auth.user;
+        if (auth.setup) {
+            renderLogin(true);
+        } else if (!currentUser) {
+            renderLogin();
+        } else {
+            render();
+        }
+    } catch (e) {
+        showMessage(e.message);
+    }
+}
+
+start();
 showVersion();

@@ -26,6 +26,8 @@ constexpr int HTTP_OK = 200;
 constexpr int HTTP_CREATED = 201;
 constexpr int HTTP_NO_CONTENT = 204;
 constexpr int HTTP_BAD_REQUEST = 400;
+constexpr int HTTP_UNAUTHORIZED = 401;
+constexpr int HTTP_FORBIDDEN = 403;
 constexpr int HTTP_NOT_FOUND = 404;
 constexpr int HTTP_PAYLOAD_TOO_LARGE = 413;
 constexpr int HTTP_INTERNAL_ERROR = 500;
@@ -85,34 +87,92 @@ nlohmann::json tenant_json(Tenant const &tenant) {
     return out;
 }
 
+constexpr char const SESSION_COOKIE[] = "arenda_session";
+
+/// Токен сессии из cookie запроса; пустой, если его нет.
+std::string session_token(httplib::Request const &req) {
+    auto const cookies = req.get_header_value("Cookie");
+    std::string const key = std::string(SESSION_COOKIE) + "=";
+    for (std::size_t pos = 0; pos < cookies.size();) {
+        auto const end = std::min(cookies.find(';', pos), cookies.size());
+        auto const first = cookies.find_first_not_of(' ', pos);
+        if (first < end && cookies.compare(first, key.size(), key) == 0) {
+            return cookies.substr(first + key.size(), end - first - key.size());
+        }
+        pos = end + 1;
+    }
+    return {};
+}
+
+/// Cookie сессии: только для сервера (HttpOnly), не уходит с чужих сайтов (SameSite=Strict).
+void set_session_cookie(httplib::Response &res, std::string const &token) {
+    res.set_header("Set-Cookie", std::string(SESSION_COOKIE) + "=" + token + "; Path=/; HttpOnly; SameSite=Strict; Max-Age=" +
+                                     (token.empty() ? "0" : std::to_string(SESSION_DAYS * 24 * 3600)));
+}
+
+nlohmann::json user_json(User const &user) {
+    return {{"id", user.id}, {"login", user.login}, {"name", user.name}, {"role", to_string(user.role)}, {"blocked", user.blocked}};
+}
+
+/// Строковое поле запроса. @throws UserError
+std::string string_field(nlohmann::json const &j, char const *key) {
+    if (!j.contains(key) || !j[key].is_string()) {
+        throw UserError(std::string("поле ") + key + " должно быть строкой");
+    }
+    return j[key].get<std::string>();
+}
+
+/// Необязательное строковое поле запроса: нет - fallback. @throws UserError если оно не строка
+std::string optional_string(nlohmann::json const &j, char const *key, std::string fallback) {
+    return j.contains(key) ? string_field(j, key) : std::move(fallback);
+}
+
 } // namespace
 
 Api::Api(Database &db, std::string web_dir, DaData dadata)
     : m_web_dir{std::move(web_dir)}, m_dadata{std::move(dadata)}, m_landlords{db}, m_tenants{db}, m_equipment{db}, m_contracts{db}, m_db{db} {}
 
-Api::Handler Api::guarded(Handler handler, bool lock_db) {
-    return [this, lock_db, handler = std::move(handler)](httplib::Request const &req, httplib::Response &res) {
-        std::unique_lock<std::mutex> lock;
-        if (lock_db) {
-            lock = m_db.lock();
-        }
+Api::Handler Api::guarded(Handler handler, bool lock_db) { return guarded(Access::USER, std::move(handler), lock_db); }
+
+Api::Handler Api::guarded(Access access, Handler handler, bool lock_db) {
+    return [this, access, lock_db, handler = std::move(handler)](httplib::Request const &req, httplib::Response &res) {
+        auto lock = m_db.lock();
         try {
+            m_user = Users{m_db}.by_session(session_token(req));
+            if (access != Access::PUBLIC && !m_user) {
+                throw UnauthorizedError("нужно войти");
+            }
+            if (access == Access::ADMIN && m_user->role != Role::ADMIN) {
+                throw ForbiddenError("недостаточно прав: это делает администратор");
+            }
+            if (!lock_db) {
+                m_user.reset();
+                lock.unlock();
+            }
             handler(req, res);
         } catch (UserError const &e) {
             send_error(res, HTTP_BAD_REQUEST, e.what());
+        } catch (UnauthorizedError const &e) {
+            send_error(res, HTTP_UNAUTHORIZED, e.what());
+        } catch (ForbiddenError const &e) {
+            send_error(res, HTTP_FORBIDDEN, e.what());
         } catch (NotFoundError const &e) {
             send_error(res, HTTP_NOT_FOUND, e.what());
         } catch (ExternalError const &e) {
             send_error(res, HTTP_BAD_GATEWAY, e.what());
+        }
+        if (lock.owns_lock()) {
+            m_user.reset();
         }
     };
 }
 
 void Api::register_routes(httplib::Server &server) {
     server.set_payload_max_length(MAX_REQUEST_BYTES);
-    server.Get("/api/version", guarded([this](httplib::Request const &, httplib::Response &res) {
+    server.Get("/api/version", guarded(Access::PUBLIC, [this](httplib::Request const &, httplib::Response &res) {
                    send_json(res, {{"version", ARENDA_VERSION}, {"schema", current_schema_version(m_db)}});
                }));
+    register_auth(server);
     register_landlords(server);
     register_tenants(server);
     register_lookup(server);
@@ -306,5 +366,90 @@ void Api::register_contracts(httplib::Server &server) {
                        list.push_back(m_contracts.get(id));
                    }
                    res.set_content(contract_print::render(list), HTML_TYPE);
+               }));
+}
+
+void Api::register_auth(httplib::Server &server) {
+    server.Get("/api/auth", guarded(Access::PUBLIC, [this](httplib::Request const &, httplib::Response &res) {
+                   send_json(res, {{"setup", Users{m_db}.empty()}, {"user", m_user ? user_json(*m_user) : nlohmann::json(nullptr)}});
+               }));
+
+    server.Post("/api/auth/setup", guarded(Access::PUBLIC, [this](httplib::Request const &req, httplib::Response &res) {
+                    auto const j = parse_object(req.body);
+                    Users users{m_db};
+                    User user;
+                    user.login = string_field(j, "login");
+                    user.name = optional_string(j, "name", "");
+                    auto const id = users.setup(user, string_field(j, "password"));
+                    set_session_cookie(res, users.open_session(id));
+                    send_json(res, {{"user", user_json(users.get(id))}}, HTTP_CREATED);
+                }));
+
+    server.Post("/api/auth/login", guarded(Access::PUBLIC, [this](httplib::Request const &req, httplib::Response &res) {
+                    auto const j = parse_object(req.body);
+                    Users users{m_db};
+                    auto const token = users.login(string_field(j, "login"), string_field(j, "password"));
+                    set_session_cookie(res, token);
+                    send_json(res, {{"user", user_json(*users.by_session(token))}});
+                }));
+
+    server.Post("/api/auth/logout", guarded(Access::PUBLIC, [this](httplib::Request const &req, httplib::Response &res) {
+                    Users{m_db}.logout(session_token(req));
+                    set_session_cookie(res, "");
+                    send_json(res, nlohmann::json::object());
+                }));
+
+    server.Put("/api/auth/password", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                   auto const j = parse_object(req.body);
+                   Users users{m_db};
+                   if (!users.check_password(m_user->id, string_field(j, "old_password"))) {
+                       throw UserError("текущий пароль неверный");
+                   }
+                   users.set_password(m_user->id, string_field(j, "password"));
+                   // смена пароля закрывает все сессии, в том числе эту: вместо неё открывается новая
+                   set_session_cookie(res, users.open_session(m_user->id));
+                   send_json(res, nlohmann::json::object());
+               }));
+
+    server.Get("/api/users", guarded(Access::ADMIN, [this](httplib::Request const &, httplib::Response &res) {
+                   auto out = nlohmann::json::array();
+                   for (auto const &user : Users{m_db}.list()) {
+                       out.push_back(user_json(user));
+                   }
+                   send_json(res, out);
+               }));
+
+    server.Post("/api/users", guarded(Access::ADMIN, [this](httplib::Request const &req, httplib::Response &res) {
+                    auto const j = parse_object(req.body);
+                    Users users{m_db};
+                    User user;
+                    user.login = string_field(j, "login");
+                    user.name = optional_string(j, "name", "");
+                    user.role = role_from_string(optional_string(j, "role", "user"));
+                    auto const id = users.create(user, string_field(j, "password"));
+                    send_json(res, user_json(users.get(id)), HTTP_CREATED);
+                }));
+
+    server.Put("/api/users/:id", guarded(Access::ADMIN, [this](httplib::Request const &req, httplib::Response &res) {
+                   auto const j = parse_object(req.body);
+                   Users users{m_db};
+                   auto user = users.get(path_id(req));
+                   if (j.contains("name")) {
+                       user.name = string_field(j, "name");
+                   }
+                   if (j.contains("role")) {
+                       user.role = role_from_string(string_field(j, "role"));
+                   }
+                   if (j.contains("blocked")) {
+                       if (!j["blocked"].is_boolean()) {
+                           throw UserError("поле blocked должно быть true или false");
+                       }
+                       user.blocked = j["blocked"].get<bool>();
+                   }
+                   users.update(user);
+                   if (j.contains("password")) {
+                       users.set_password(user.id, string_field(j, "password"));
+                   }
+                   send_json(res, user_json(users.get(user.id)));
                }));
 }
