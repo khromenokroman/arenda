@@ -413,6 +413,19 @@ TEST(Api, Contracts) {
     ASSERT_EQ(res->status, 200) << res->body;
     EXPECT_EQ(nlohmann::json::parse(res->body).at("tenant").at("floor"), "3") << res->body;
 
+    res = cli.Get("/api/contracts?tenant_id=" + std::to_string(tenant) + "&from=2027-03-01&to=2027-03-31");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    auto const march = nlohmann::json::parse(res->body);
+    ASSERT_EQ(march.size(), 1U) << res->body;
+    EXPECT_EQ(march[0].at("number"), "2027-02-19-500100732259");
+    res = cli.Get("/api/contracts?tenant_id=x");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << res->body;
+    res = cli.Get("/api/contracts?from=2027-02-01&to=2027-01-01");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << res->body;
+
     res = cli.Delete(first);
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 204);

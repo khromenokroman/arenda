@@ -71,6 +71,17 @@ std::vector<std::int64_t> parse_ids(std::string const &text) {
     return ids;
 }
 
+/// id из параметра запроса. @throws UserError не число
+std::int64_t query_id(httplib::Request const &req, std::string const &key) {
+    auto const text = req.get_param_value(key);
+    std::int64_t id = 0;
+    auto const [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), id);
+    if (ec != std::errc{} || ptr != text.data() + text.size()) {
+        throw UserError("параметр " + key + " должен быть числом: " + text);
+    }
+    return id;
+}
+
 /// id из пути запроса; не число означает несуществующий объект.
 std::int64_t path_id(httplib::Request const &req) {
     auto const &text = req.path_params.at("id");
@@ -349,8 +360,17 @@ void Api::register_contracts(httplib::Server &server) {
                     send_json(res, contracts_json(created), HTTP_CREATED);
                 }));
 
-    server.Get("/api/contracts", guarded([this, contracts_json](httplib::Request const &, httplib::Response &res) {
-                   send_json(res, contracts_json(m_contracts.list()));
+    server.Get("/api/contracts", guarded([this, contracts_json](httplib::Request const &req, httplib::Response &res) {
+                   ContractFilter filter;
+                   filter.from = req.get_param_value("from");
+                   filter.to = req.get_param_value("to");
+                   if (req.has_param("landlord_id") && !req.get_param_value("landlord_id").empty()) {
+                       filter.landlord_id = query_id(req, "landlord_id");
+                   }
+                   if (req.has_param("tenant_id") && !req.get_param_value("tenant_id").empty()) {
+                       filter.tenant_id = query_id(req, "tenant_id");
+                   }
+                   send_json(res, contracts_json(m_contracts.list(filter)));
                }));
 
     server.Get("/api/contracts/:id",

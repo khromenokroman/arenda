@@ -134,3 +134,27 @@ TEST_F(ContractsTest, ListOrder) {
     EXPECT_EQ(list[0].start, "2026-11-01");
     EXPECT_EQ(list[1].start, "2026-10-19");
 }
+
+/**
+ * @brief Отбор: по арендатору, арендодателю и пересечению срока с периодом; неверный период - отказ.
+ */
+TEST_F(ContractsTest, Filter) {
+    // Петров: 19.10.2026-18.02.2027, 19.02-18.06.2027, 19.06-18.09.2027; Берёза: 01.11.2026-30.09.2027
+    m_contracts.create(m_landlord,
+                       {{.start = "2026-10-19", .rent = "20 000", .tenant_id = m_ip}, {.start = "2026-11-01", .rent = "9000", .tenant_id = m_org}});
+    auto const other = Landlords{m_db}.create({{"name_full", "ООО «Другой»"}, {"name_short", "Другой"}});
+    m_contracts.create(other, {{.start = "2027-10-01", .rent = "9000", .tenant_id = m_ip}});
+
+    EXPECT_EQ(m_contracts.list().size(), 5U) << "без отбора все";
+    EXPECT_EQ(m_contracts.list({.tenant_id = m_org}).size(), 1U);
+    EXPECT_EQ(m_contracts.list({.landlord_id = other}).size(), 1U);
+    EXPECT_EQ(m_contracts.list({.landlord_id = m_landlord, .tenant_id = m_ip}).size(), 3U);
+    EXPECT_THAT(numbers_of(m_contracts.list({.from = "2027-03-01", .to = "2027-03-31", .tenant_id = m_ip})),
+                testing::ElementsAre("2027-02-19-500100732259 2027-02-19..2027-06-18"))
+        << "в марте 2027 у Петрова действует вторая часть";
+    EXPECT_EQ(m_contracts.list({.from = "2027-06-18", .to = "2027-06-19", .tenant_id = m_ip}).size(), 2U) << "граница частей: обе действуют";
+    EXPECT_EQ(m_contracts.list({.from = "2027-10-01"}).size(), 1U) << "только договор, начатый 01.10.2027";
+    EXPECT_EQ(m_contracts.list({.to = "2026-10-31"}).size(), 1U) << "в октябре 2026 только первая часть Петрова";
+    EXPECT_THROW_REASON((void)m_contracts.list({.from = "2027-01-01", .to = "2026-01-01"}), UserError, "позже конца");
+    EXPECT_THROW_REASON((void)m_contracts.list({.from = "2027-13-01"}), UserError, "нет такой даты");
+}

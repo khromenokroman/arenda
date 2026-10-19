@@ -396,21 +396,58 @@ function printContracts(ids) {
     window.open(ids.length === 1 ? `/print/contracts/${ids[0]}` : `/print/contracts?ids=${ids.join(',')}`, '_blank');
 }
 
+/** Адрес списка договоров с отбором: «← Договоры» в карточке возвращает к нему. */
+let contractsListHash = '#/contracts';
+
 /** id договоров, созданных последним документом: кнопка «Напечатать созданные» в списке. */
 let lastCreated = [];
 
-async function renderContracts(page) {
-    const list = await api('GET', '/api/contracts');
+async function renderContracts(page, params) {
+    contractsListHash = location.hash || '#/contracts';
+    const filter = {tenant_id: params.get('tenant') || '', landlord_id: params.get('landlord') || '', from: params.get('from') || '', to: params.get('to') || ''};
+    const query = new URLSearchParams(Object.entries(filter).filter(([, v]) => v !== '')).toString();
+    const [list, tenants, landlords] = await Promise.all([
+        api('GET', `/api/contracts${query ? `?${query}` : ''}`), api('GET', '/api/tenants'), api('GET', '/api/landlords'),
+    ]);
+    const filtered = Object.values(filter).some(v => v !== '');
     const created = lastCreated.filter(id => list.some(c => c.id === id));
+    const option = (value, title, current) => `<option value="${value}"${String(value) === current ? ' selected' : ''}>${esc(title)}</option>`;
     page.innerHTML = `<h2>Договоры</h2>
         <p><a class="button" href="#/contracts/new">+ создать договоры</a>
             ${created.length === 0 ? '' : `<button type="button" id="print-created">Напечатать созданные (${created.length})</button>`}
-            ${list.length === 0 ? '' : '<button type="button" id="print-picked" disabled>Печать выбранных</button>'}
-            ${list.length === 0 ? '' : '<input id="filter" placeholder="поиск по номеру или арендатору" class="filter">'}</p>
-        ${list.length === 0 ? '<p class="muted">Договоров пока нет.</p>' : contractsTable(list, true)}`;
+            ${list.length === 0 ? '' : '<button type="button" id="print-picked" disabled>Печать выбранных</button>'}</p>
+        <form class="filters" id="filters">
+            <select name="tenant"><option value="">все арендаторы</option>${tenants.map(t => option(t.id, t.title, filter.tenant_id)).join('')}</select>
+            <select name="landlord"><option value="">все арендодатели</option>${landlords.map(l => option(l.id, l.name_short, filter.landlord_id)).join('')}</select>
+            <label>действует с <input type="date" name="from" value="${esc(filter.from)}"></label>
+            <label>по <input type="date" name="to" value="${esc(filter.to)}"></label>
+            ${filtered ? '<button type="button" id="reset">Сбросить</button>' : ''}
+            <input id="filter" placeholder="поиск по номеру или арендатору" class="filter">
+        </form>
+        ${list.length === 0 ? `<p class="muted">${filtered ? 'По отбору договоров нет.' : 'Договоров пока нет.'}</p>` : contractsTable(list, true)}
+        ${list.length === 0 ? '' : `<p class="muted">Договоров: ${list.length}</p>`}`;
+    const filters = page.querySelector('#filters');
+    filters.addEventListener('change', event => {
+        if (event.target.id === 'filter') {
+            return;
+        }
+        const next = new URLSearchParams([...new FormData(filters)].filter(([, v]) => v !== ''));
+        location.hash = `#/contracts${next.toString() ? `?${next}` : ''}`;
+    });
+    const reset = page.querySelector('#reset');
+    if (reset) {
+        reset.addEventListener('click', () => { location.hash = '#/contracts'; });
+    }
     if (created.length !== 0) {
         page.querySelector('#print-created').addEventListener('click', () => printContracts(created));
     }
+    const search = page.querySelector('#filter');
+    search.addEventListener('input', () => {
+        const text = search.value.trim().toLowerCase();
+        page.querySelectorAll('table.contracts tbody tr').forEach(tr => {
+            tr.hidden = text !== '' && !tr.textContent.toLowerCase().includes(text);
+        });
+    });
     if (list.length === 0) {
         return;
     }
@@ -429,13 +466,6 @@ async function renderContracts(page) {
         updatePicked();
     });
     printPicked.addEventListener('click', () => printContracts(picks().filter(i => i.checked).map(i => Number(i.value))));
-    const filter = page.querySelector('#filter');
-    filter.addEventListener('input', () => {
-        const text = filter.value.trim().toLowerCase();
-        page.querySelectorAll('table.contracts tbody tr').forEach(tr => {
-            tr.hidden = text !== '' && !tr.textContent.toLowerCase().includes(text);
-        });
-    });
 }
 
 /** Строка документа «Создание договоров». */
@@ -543,7 +573,7 @@ async function renderContract(page, idText) {
         <tbody>${c.equipment.map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.model)}</td><td class="num">${esc(r.power)}</td><td class="num">${r.qty}</td></tr>`).join('')}</tbody>
         </table><p>Суммарная мощность: ${esc(c.total_power)} кВт</p>`;
     page.innerHTML = `<h2>Договор ${esc(c.number)}</h2>
-        <p><a href="#/contracts">← Договоры</a></p>
+        <p><a href="${esc(contractsListHash)}">← Договоры</a></p>
         <table class="info">
             ${infoRow('Срок', `${ruDate(c.start)} – ${ruDate(c.end)} (${c.months} мес.)`)}
             ${infoRow('Плата в месяц, руб.', c.rent)}
@@ -581,7 +611,7 @@ async function renderContract(page, idText) {
         }
         try {
             await api('DELETE', `/api/contracts/${idText}`);
-            navigate('#/contracts', `Удалён договор ${c.number}`);
+            navigate(contractsListHash, `Удалён договор ${c.number}`);
         } catch (e) {
             showMessage(e.message);
         }
@@ -592,7 +622,7 @@ async function render() {
     if (!currentUser) {
         return;
     }
-    const path = location.hash.replace(/^#\/?/, '') || MENU[0].path;
+    const [path, query] = (location.hash.replace(/^#\/?/, '') || MENU[0].path).split('?');
     document.getElementById('menu').innerHTML = MENU
         .filter(m => !m.admin || currentUser.role === 'admin')
         .map(m => `<a href="#/${m.path}"${path.split('/')[0] === m.path ? ' class="active"' : ''}>${m.title}</a>`)
@@ -613,7 +643,7 @@ async function render() {
         return;
     }
     try {
-        await route.render(page, ...path.match(route.re).slice(1));
+        await route.render(page, ...path.match(route.re).slice(1), new URLSearchParams(query || ''));
     } catch (e) {
         if (currentUser) {
             page.innerHTML = '<h2>Ошибка</h2>';
@@ -730,7 +760,7 @@ function fileSize(bytes) {
     return `${value.toLocaleString('ru-RU', {maximumFractionDigits: 1})} ${units[unit]}`;
 }
 
-async function renderBackups(page, state = null) {
+async function renderBackups(page, params = null, state = null) {
     const data = state || await api('GET', '/api/backups');
     const s = data.schedule;
     const rows = data.backups.map(b => `<tr>
@@ -757,7 +787,7 @@ async function renderBackups(page, state = null) {
     page.querySelector('#backup-now').addEventListener('click', async () => {
         try {
             const next = await api('POST', '/api/backups');
-            await renderBackups(page, next);
+            await renderBackups(page, null, next);
             showMessage(`Сделана копия ${next.created}`, false);
         } catch (e) {
             showMessage(e.message);
@@ -770,7 +800,7 @@ async function renderBackups(page, state = null) {
             const next = await api('PUT', '/api/backups/schedule', {
                 enabled: form.enabled.checked, time: form.time.value, keep: Number(form.keep.value),
             });
-            await renderBackups(page, next);
+            await renderBackups(page, null, next);
             showMessage('Расписание сохранено', false);
         } catch (e) {
             showMessage(e.message);
@@ -781,7 +811,7 @@ async function renderBackups(page, state = null) {
             return;
         }
         try {
-            await renderBackups(page, await api('DELETE', `/api/backups/${encodeURIComponent(button.dataset.name)}`));
+            await renderBackups(page, null, await api('DELETE', `/api/backups/${encodeURIComponent(button.dataset.name)}`));
             showMessage('Копия удалена', false);
         } catch (e) {
             showMessage(e.message);

@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <set>
 
+#include "dates.hpp"
 #include "errors.hpp"
 #include "landlords.hpp"
 #include "lease_split.hpp"
@@ -158,8 +159,32 @@ std::vector<std::int64_t> Contracts::create(std::int64_t landlord_id, std::vecto
     return ids;
 }
 
-std::vector<Contract> Contracts::list() const {
-    auto stmt = m_db.prepare(std::string(SELECT) + " ORDER BY date_start DESC, number");
+std::vector<Contract> Contracts::list(ContractFilter const &filter) const {
+    if (!filter.from.empty()) {
+        check_date(filter.from);
+    }
+    if (!filter.to.empty()) {
+        check_date(filter.to);
+    }
+    if (!filter.from.empty() && !filter.to.empty() && filter.from > filter.to) {
+        throw UserError("начало периода " + filter.from + " позже конца " + filter.to);
+    }
+    // незаданное условие отключается проверкой параметра на пустоту или NULL: текст запроса один
+    auto stmt = m_db.prepare(std::string(SELECT) +
+                             " WHERE (?1 = '' OR date_end >= ?1) AND (?2 = '' OR date_start <= ?2)"
+                             " AND (?3 IS NULL OR landlord_id = ?3) AND (?4 IS NULL OR tenant_id = ?4)"
+                             " ORDER BY date_start DESC, number");
+    stmt.bind(1, filter.from).bind(2, filter.to);
+    if (filter.landlord_id) {
+        stmt.bind(3, *filter.landlord_id);
+    } else {
+        stmt.bind_null(3);
+    }
+    if (filter.tenant_id) {
+        stmt.bind(4, *filter.tenant_id);
+    } else {
+        stmt.bind_null(4);
+    }
     std::vector<Contract> out;
     while (stmt.step()) {
         out.push_back(read(stmt));

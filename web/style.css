@@ -111,3 +111,7 @@ form.login { max-width: 520px; }
 table.users td.actions { display: flex; gap: 6px; flex-wrap: wrap; }
 form.card input[type=checkbox] { width: auto; justify-self: start; }
 table.backups td.actions { display: flex; gap: 6px; }
+
+form.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+form.filters select, form.filters input { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+form.filters input.filter { margin-left: 0; }
