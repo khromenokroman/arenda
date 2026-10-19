@@ -20,7 +20,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             ca-certificates git build-essential cmake clang-format-16 clang-tidy-16 \
-            libsqlite3-dev nlohmann-json3-dev libgtest-dev libgmock-dev
+            libsqlite3-dev libssl-dev nlohmann-json3-dev libgtest-dev libgmock-dev
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -54,7 +54,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             ca-certificates git build-essential cmake curl chromium nodejs \
-            libsqlite3-dev nlohmann-json3-dev libgtest-dev libgmock-dev
+            libsqlite3-dev libssl-dev nlohmann-json3-dev libgtest-dev libgmock-dev
 
       - name: Checkout
         uses: actions/checkout@v7
