@@ -171,12 +171,12 @@ async function renderLandlord(page, idText) {
         const body = Object.fromEntries(new FormData(form));
         try {
             const saved = await api(isNew ? 'POST' : 'PUT', isNew ? '/api/landlords' : `/api/landlords/${idText}`, body);
-            showMessage(`Сохранено: ${saved.name_short}`, false);
             form.querySelectorAll('.filled').forEach(i => i.classList.remove('filled'));
             if (isNew) {
-                location.hash = `#/landlords/${saved.id}`;
+                navigate(`#/landlords/${saved.id}`, `Сохранено: ${saved.name_short}`);
             } else {
                 page.querySelector('h2').textContent = saved.name_short;
+                showMessage(`Сохранено: ${saved.name_short}`, false);
             }
         } catch (e) {
             showMessage(e.message);
@@ -190,8 +190,7 @@ async function renderLandlord(page, idText) {
             }
             try {
                 await api('DELETE', `/api/landlords/${idText}`);
-                showMessage(`Удалено: ${values.name_short}`, false);
-                location.hash = '#/landlords';
+                navigate('#/landlords', `Удалено: ${values.name_short}`);
             } catch (e) {
                 showMessage(e.message);
             }
@@ -319,18 +318,20 @@ async function renderTenant(page, idText) {
             try {
                 await api('PUT', `/api/tenants/${saved.id}/equipment`, equipmentRows(table));
             } catch (e) {
-                // карточка уже сохранена: открываем её, чтобы исправить оборудование
+                const text = `Карточка сохранена, оборудование нет: ${e.message}`;
                 if (isNew) {
-                    location.hash = `#/tenants/${saved.id}`;
+                    // карточка уже есть: открываем её, чтобы исправить оборудование
+                    navigate(`#/tenants/${saved.id}`, text, true);
+                    return;
                 }
-                throw new Error(`Карточка сохранена, оборудование нет: ${e.message}`);
+                throw new Error(text);
             }
-            showMessage(`Сохранено: ${saved.title}`, false);
             form.querySelectorAll('.filled').forEach(i => i.classList.remove('filled'));
             if (isNew) {
-                location.hash = `#/tenants/${saved.id}`;
+                navigate(`#/tenants/${saved.id}`, `Сохранено: ${saved.title}`);
             } else {
                 page.querySelector('h2').textContent = saved.title;
+                showMessage(`Сохранено: ${saved.title}`, false);
             }
         } catch (e) {
             showMessage(e.message);
@@ -344,8 +345,7 @@ async function renderTenant(page, idText) {
             }
             try {
                 await api('DELETE', `/api/tenants/${idText}`);
-                showMessage(`Удалено: ${tenant.title}`, false);
-                location.hash = '#/tenants';
+                navigate('#/tenants', `Удалено: ${tenant.title}`);
             } catch (e) {
                 showMessage(e.message);
             }
@@ -359,9 +359,10 @@ function ruDate(iso) {
     return d ? `${d}.${m}.${y}` : iso;
 }
 
-/** Таблица договоров (список и расчёт): номер ссылкой, если договор уже создан. */
-function contractsTable(list) {
+/** Таблица договоров (список и расчёт): номер ссылкой и флажок для печати, если договор уже создан. */
+function contractsTable(list, selectable = false) {
     const rows = list.map(c => `<tr>
+            ${selectable ? `<td><input type="checkbox" class="pick" value="${c.id}" aria-label="выбрать ${esc(c.number)}"></td>` : ''}
             <td>${c.id ? `<a href="#/contracts/${c.id}">${esc(c.number)}</a>` : esc(c.number)}</td>
             <td>${esc(c.tenant_title)}</td>
             <td>${ruDate(c.start)} – ${ruDate(c.end)}</td>
@@ -370,26 +371,57 @@ function contractsTable(list) {
             <td class="num">${esc(c.total)}</td>
         </tr>`).join('');
     return `<table class="list contracts">
-        <thead><tr><th>Номер</th><th>Арендатор</th><th>Срок</th><th class="num">Мес.</th><th class="num">Плата в месяц</th><th class="num">За срок</th></tr></thead>
+        <thead><tr>${selectable ? '<th><input type="checkbox" id="pick-all" aria-label="выбрать все"></th>' : ''}<th>Номер</th><th>Арендатор</th>
+            <th>Срок</th><th class="num">Мес.</th><th class="num">Плата в месяц</th><th class="num">За срок</th></tr></thead>
         <tbody>${rows}</tbody>
     </table>`;
 }
 
+/** Открывает печатную форму договоров в новой вкладке. */
+function printContracts(ids) {
+    window.open(ids.length === 1 ? `/print/contracts/${ids[0]}` : `/print/contracts?ids=${ids.join(',')}`, '_blank');
+}
+
+/** id договоров, созданных последним документом: кнопка «Напечатать созданные» в списке. */
+let lastCreated = [];
+
 async function renderContracts(page) {
     const list = await api('GET', '/api/contracts');
+    const created = lastCreated.filter(id => list.some(c => c.id === id));
     page.innerHTML = `<h2>Договоры</h2>
         <p><a class="button" href="#/contracts/new">+ создать договоры</a>
+            ${created.length === 0 ? '' : `<button type="button" id="print-created">Напечатать созданные (${created.length})</button>`}
+            ${list.length === 0 ? '' : '<button type="button" id="print-picked" disabled>Печать выбранных</button>'}
             ${list.length === 0 ? '' : '<input id="filter" placeholder="поиск по номеру или арендатору" class="filter">'}</p>
-        ${list.length === 0 ? '<p class="muted">Договоров пока нет.</p>' : contractsTable(list)}`;
-    const filter = page.querySelector('#filter');
-    if (filter) {
-        filter.addEventListener('input', () => {
-            const text = filter.value.trim().toLowerCase();
-            page.querySelectorAll('table.contracts tbody tr').forEach(tr => {
-                tr.hidden = text !== '' && !tr.textContent.toLowerCase().includes(text);
-            });
-        });
+        ${list.length === 0 ? '<p class="muted">Договоров пока нет.</p>' : contractsTable(list, true)}`;
+    if (created.length !== 0) {
+        page.querySelector('#print-created').addEventListener('click', () => printContracts(created));
     }
+    if (list.length === 0) {
+        return;
+    }
+    const picks = () => [...page.querySelectorAll('input.pick')];
+    const printPicked = page.querySelector('#print-picked');
+    const updatePicked = () => {
+        const n = picks().filter(i => i.checked).length;
+        printPicked.disabled = n === 0;
+        printPicked.textContent = n === 0 ? 'Печать выбранных' : `Печать выбранных (${n})`;
+    };
+    page.querySelector('table.contracts').addEventListener('change', event => {
+        if (event.target.id === 'pick-all') {
+            // только видимые после поиска
+            picks().filter(i => !i.closest('tr').hidden).forEach(i => { i.checked = event.target.checked; });
+        }
+        updatePicked();
+    });
+    printPicked.addEventListener('click', () => printContracts(picks().filter(i => i.checked).map(i => Number(i.value))));
+    const filter = page.querySelector('#filter');
+    filter.addEventListener('input', () => {
+        const text = filter.value.trim().toLowerCase();
+        page.querySelectorAll('table.contracts tbody tr').forEach(tr => {
+            tr.hidden = text !== '' && !tr.textContent.toLowerCase().includes(text);
+        });
+    });
 }
 
 /** Строка документа «Создание договоров». */
@@ -476,8 +508,8 @@ async function renderContractsNew(page) {
         event.preventDefault();
         try {
             const created = await api('POST', '/api/contracts', body());
-            showMessage(`Создано договоров: ${created.length}`, false);
-            location.hash = '#/contracts';
+            lastCreated = created.map(c => c.id);
+            navigate('#/contracts', `Создано договоров: ${created.length}`);
         } catch (e) {
             showMessage(e.message);
         }
@@ -515,9 +547,11 @@ async function renderContract(page, idText) {
         ${equipment}
         <p class="muted">Данные сторон скопированы в договор при создании. Если карточки исправлены, нажмите «Обновить из карточек».</p>
         <div class="actions">
+            <button type="submit" id="print">Печать</button>
             <button type="button" id="refresh">Обновить из карточек</button>
             <button type="button" class="danger" id="remove">Удалить</button>
         </div>`;
+    page.querySelector('#print').addEventListener('click', () => printContracts([c.id]));
     page.querySelector('#refresh').addEventListener('click', async () => {
         try {
             await api('POST', `/api/contracts/${idText}/refresh`);
@@ -533,8 +567,7 @@ async function renderContract(page, idText) {
         }
         try {
             await api('DELETE', `/api/contracts/${idText}`);
-            showMessage(`Удалён договор ${c.number}`, false);
-            location.hash = '#/contracts';
+            navigate('#/contracts', `Удалён договор ${c.number}`);
         } catch (e) {
             showMessage(e.message);
         }
@@ -570,8 +603,18 @@ async function showVersion() {
     }
 }
 
+/** Сообщение для страницы, на которую переходим: показывается после смены адреса. */
+let pendingMessage = null;
+
+/** Переход на адрес с сообщением на новой странице (по умолчанию об успехе). */
+function navigate(hash, text, isError = false) {
+    pendingMessage = {text, isError};
+    location.hash = hash;
+}
+
 window.addEventListener('hashchange', () => {
-    showMessage('');
+    showMessage(pendingMessage ? pendingMessage.text : '', pendingMessage ? pendingMessage.isError : true);
+    pendingMessage = null;
     render();
 });
 render();

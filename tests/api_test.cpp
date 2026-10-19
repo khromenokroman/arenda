@@ -402,3 +402,48 @@ TEST(Api, Contracts) {
     EXPECT_EQ(res->status, 400);
     EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr("строка 1: укажите плату в месяц строкой"));
 }
+
+/**
+ * @brief Печать: один договор и пачка как HTML, ошибки списка и несуществующий договор.
+ */
+TEST(Api, Print) {
+    TestServer srv;
+    auto cli = srv.client();
+    constexpr char const JSON[] = "application/json";
+    auto res = cli.Post("/api/landlords", R"({"name_full": "ООО «Ромашка»", "name_short": "Ромашка"})", JSON);
+    ASSERT_TRUE(res);
+    auto const landlord = nlohmann::json::parse(res->body).at("id").get<std::int64_t>();
+    res = cli.Post("/api/tenants", R"({"kind": "ip", "name": "Петров Пётр Петрович", "gender": "m", "inn": "500100732259"})", JSON);
+    ASSERT_TRUE(res);
+    auto const tenant = nlohmann::json::parse(res->body).at("id").get<std::int64_t>();
+    res = cli.Post("/api/contracts",
+                   nlohmann::json{{"landlord_id", landlord}, {"rows", {{{"tenant_id", tenant}, {"start", "2026-10-19"}, {"rent", "20 000"}}}}}.dump(),
+                   JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 201) << res->body;
+    auto const created = nlohmann::json::parse(res->body);
+    auto const a = std::to_string(created[0].at("id").get<std::int64_t>());
+    auto const b = std::to_string(created[1].at("id").get<std::int64_t>());
+
+    res = cli.Get("/print/contracts/" + a);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    EXPECT_THAT(res->get_header_value("Content-Type"), HasSubstr("text/html"));
+    EXPECT_THAT(res->body, HasSubstr("<title>Договор аренды № 2026-10-19-500100732259</title>"));
+
+    res = cli.Get("/print/contracts?ids=" + b + "," + a);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    EXPECT_THAT(res->body, HasSubstr("<title>Договоры аренды: 2</title>"));
+    EXPECT_LT(res->body.find("№ 2027-02-19-500100732259"), res->body.find("№ 2026-10-19-500100732259")) << "порядок как в ids";
+
+    res = cli.Get("/print/contracts?ids=1,x");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << res->body;
+    res = cli.Get("/print/contracts?ids=");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << res->body;
+    res = cli.Get("/print/contracts/999");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404) << res->body;
+}

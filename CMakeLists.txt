@@ -24,11 +24,18 @@ target_include_directories(httplib SYSTEM INTERFACE third_party)
 target_compile_definitions(httplib INTERFACE CPPHTTPLIB_OPENSSL_SUPPORT)
 target_link_libraries(httplib INTERFACE OpenSSL::SSL OpenSSL::Crypto)
 
+# шаблон договора вшивается в программу: правка templates/contract.html пересобирает её
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/templates/contract.html ARENDA_CONTRACT_TEMPLATE)
+configure_file(src/contract_template.cpp.in contract_template.cpp @ONLY)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS templates/contract.html)
+
 set(ARENDA_WEB_DIR "${CMAKE_INSTALL_FULL_DATADIR}/${PROJECT_NAME}/web")
 
 add_library(${PROJECT_NAME}-core STATIC
         src/api.cpp
         src/card_store.cpp
+        src/contract_print.cpp
+        ${CMAKE_CURRENT_BINARY_DIR}/contract_template.cpp
         src/contracts.cpp
         src/dadata.cpp
         src/dates.cpp
@@ -38,6 +45,7 @@ add_library(${PROJECT_NAME}-core STATIC
         src/json_io.cpp
         src/landlords.cpp
         src/lease_split.cpp
+        src/money_words.cpp
         src/names.cpp
         src/numbers.cpp
         src/options.cpp
@@ -64,6 +72,7 @@ if (BUILD_TESTS)
     find_package(GTest REQUIRED)
     add_executable(${PROJECT_NAME}-tests
             tests/api_test.cpp
+            tests/contract_print_test.cpp
             tests/contracts_test.cpp
             tests/dadata_test.cpp
             tests/dates_test.cpp
@@ -71,6 +80,7 @@ if (BUILD_TESTS)
             tests/equipment_test.cpp
             tests/landlords_test.cpp
             tests/lease_split_test.cpp
+            tests/money_words_test.cpp
             tests/names_test.cpp
             tests/numbers_test.cpp
             tests/options_test.cpp

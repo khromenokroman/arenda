@@ -1,0 +1,4 @@
+// Создан CMake из templates/contract.html, не править.
+#include "contract_template.hpp"
+
+std::string_view contract_template() { return R"arenda_template(@ARENDA_CONTRACT_TEMPLATE@)arenda_template"; }

@@ -2,12 +2,14 @@
 
 #include <httplib.h>
 
+#include <algorithm>
 #include <charconv>
 #include <exception>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <utility>
 
+#include "contract_print.hpp"
 #include "errors.hpp"
 #include "json_io.hpp"
 #include "schema.hpp"
@@ -15,6 +17,7 @@
 namespace {
 
 constexpr char const JSON_TYPE[] = "application/json; charset=utf-8";
+constexpr char const HTML_TYPE[] = "text/html; charset=utf-8";
 
 /// Наибольший размер тела запроса: реквизиты и условия договора укладываются с большим запасом.
 constexpr std::size_t MAX_REQUEST_BYTES = std::size_t{1024} * 1024;
@@ -44,6 +47,23 @@ std::string http_error_text(httplib::Request const &req, int status) {
         return "запрос больше " + std::to_string(MAX_REQUEST_BYTES / 1024) + " КБ";
     }
     return "ошибка запроса";
+}
+
+/// Список id через запятую: «1,2,3».
+std::vector<std::int64_t> parse_ids(std::string const &text) {
+    std::vector<std::int64_t> ids;
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        auto const end = std::min(text.find(',', pos), text.size());
+        std::int64_t id = 0;
+        auto const [ptr, ec] = std::from_chars(text.data() + pos, text.data() + end, id);
+        if (ec != std::errc{} || ptr != text.data() + end) {
+            throw UserError("неверный список договоров: " + text);
+        }
+        ids.push_back(id);
+        pos = end + 1;
+    }
+    return ids;
 }
 
 /// id из пути запроса; не число означает несуществующий объект.
@@ -275,4 +295,16 @@ void Api::register_contracts(httplib::Server &server) {
                       m_contracts.remove(path_id(req));
                       res.status = HTTP_NO_CONTENT;
                   }));
+
+    // печатная форма: HTML-страница A4, один договор или пачка ?ids=1,2,3 в заданном порядке
+    server.Get("/print/contracts/:id", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                   res.set_content(contract_print::render({m_contracts.get(path_id(req))}), HTML_TYPE);
+               }));
+    server.Get("/print/contracts", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                   std::vector<Contract> list;
+                   for (auto const id : parse_ids(req.get_param_value("ids"))) {
+                       list.push_back(m_contracts.get(id));
+                   }
+                   res.set_content(contract_print::render(list), HTML_TYPE);
+               }));
 }
