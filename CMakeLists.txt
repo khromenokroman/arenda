@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25.1)
 project(arenda
-        VERSION 0.9.0.0
+        VERSION 0.9.1.0
         LANGUAGES CXX
         HOMEPAGE_URL "https://github.com/khromenokroman/arenda")
 
