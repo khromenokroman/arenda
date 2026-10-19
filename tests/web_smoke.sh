@@ -27,8 +27,12 @@ for _ in $(seq 50); do
 done
 
 API=http://127.0.0.1:$PORT/api
-dump_page() { node "$DIR/e2e/drive.js" "http://127.0.0.1:$PORT/#/$1" --dump 2>/dev/null || true; }
-call() { curl -sf -X "$1" "$API/$2" -H 'Content-Type: application/json' -d "$3"; }
+dump_as() { COOKIE=$1 node "$DIR/e2e/drive.js" "http://127.0.0.1:$PORT/#/$2" --dump 2>/dev/null || true; }
+SETUP_DOM=$(dump_as "" contracts)
+ADMIN=$(curl -sf -D - -o /dev/null -X POST "$API/auth/setup" -H 'Content-Type: application/json' \
+    -d '{"login":"admin","name":"Админ","password":"secret1"}' | sed -n 's/^Set-Cookie: \([^;]*\).*/\1/Ip')
+dump_page() { dump_as "$ADMIN" "$1"; }
+call() { curl -sf -X "$1" "$API/$2" -H 'Content-Type: application/json' -H "Cookie: $ADMIN" -d "$3"; }
 id() { sed -n 's/.*"id":\([0-9]*\).*/\1/p'; }
 
 EMPTY_LIST=$(dump_page landlords)
@@ -56,9 +60,23 @@ PAGES=(
     "contracts"
     "contracts/new"
     "contracts/$CONTRACT"
+    "users"
+    "password"
 )
 
 failed=0
+if grep -q 'Создать администратора' <<<"$SETUP_DOM"; then
+    echo "ok    пустая база: форма первого администратора"
+else
+    failed=1
+    echo "FAIL  пустая база: нет формы первого администратора"
+fi
+if grep -q '>Войти<' <<<"$(dump_as "" contracts)"; then
+    echo "ok    без входа: форма входа"
+else
+    failed=1
+    echo "FAIL  без входа: нет формы входа"
+fi
 check() {
     local page=$1 dom=$2
     main=$(tr -d '\n' <<<"$dom" | grep -o '<main.*</main>' || true)

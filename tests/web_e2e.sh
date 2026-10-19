@@ -1,6 +1,7 @@
 #!/bin/bash
 # Сценарии с кликами в headless Chrome (tests/e2e/*.js через tests/e2e/drive.js, нужен node).
-# Каждый сценарий получает свежую пустую базу; DaData подменяется tests/e2e/fake_dadata.js (ключ good).
+# Каждый сценарий получает свежую базу с администратором admin/secret1 и входит под ним (кроме auth.js,
+# он входит сам); DaData подменяется tests/e2e/fake_dadata.js (ключ good).
 #
 # Использование: tests/web_e2e.sh <путь к arenda> <каталог web>
 # E2E_ONLY=landlords.js - только этот сценарий.
@@ -20,6 +21,7 @@ SCENARIOS=(
     "tenants.js|#/tenants/new"
     "lookup.js|#/landlords/new"
     "contracts.js|#/contracts"
+    "auth.js|#/contracts"
 )
 
 node "$DIR/e2e/fake_dadata.js" "$DADATA_PORT" &
@@ -39,7 +41,11 @@ for entry in "${SCENARIOS[@]}"; do
         curl -sf "http://127.0.0.1:$PORT/api/version" >/dev/null && break
         sleep 0.1
     done
-    if node "$DIR/e2e/drive.js" "http://127.0.0.1:$PORT/$hash" "$DIR/e2e/$script"; then
+    ADMIN=$(curl -sf -D - -o /dev/null -X POST "http://127.0.0.1:$PORT/api/auth/setup" -H 'Content-Type: application/json' \
+        -d '{"login":"admin","name":"Админ","password":"secret1"}' | sed -n 's/^Set-Cookie: \([^;]*\).*/\1/Ip')
+    cookie=$ADMIN
+    [ "$script" = auth.js ] && cookie=
+    if COOKIE=$cookie node "$DIR/e2e/drive.js" "http://127.0.0.1:$PORT/$hash" "$DIR/e2e/$script"; then
         echo "ok    $script"
     else
         echo "FAIL  $script"

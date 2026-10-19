@@ -1,14 +1,16 @@
-// Драйвер Chrome по CDP через --remote-debugging-pipe без зависимостей: node drive.js <url> <scenario.js | --dump>
+// Драйвер Chrome по CDP через --remote-debugging-pipe без зависимостей: node drive.js <url> <scenario.js | --dump | --pdf файл>
 // Сценарий - тело async-функции в странице с помощниками sleep, btn(текст), expect(условие, текст).
 // Код возврата 1, если сценарий бросил исключение; печатается журнал log.
-// --dump вместо сценария печатает DOM страницы после загрузки.
+// --dump вместо сценария печатает DOM страницы после загрузки; --pdf файл - печать страницы в PDF
+// с размером и полями из CSS @page (как Ctrl+P без колонтитулов).
 // COOKIE=имя=значение ставит cookie до открытия страницы.
 // E2E_TIMEOUT - предел сценария в секундах (по умолчанию 20).
 const {spawn} = require('child_process');
 const fs = require('fs');
-const [url, scenarioFile] = process.argv.slice(2);
+const [url, scenarioFile, pdfFile] = process.argv.slice(2);
 const dump = scenarioFile === '--dump';
-const scenario = dump ? '' : fs.readFileSync(scenarioFile, 'utf8');
+const pdf = scenarioFile === '--pdf';
+const scenario = dump || pdf ? '' : fs.readFileSync(scenarioFile, 'utf8');
 const chrome = spawn(process.env.CHROME || 'google-chrome', ['--headless=new', '--disable-gpu', '--no-sandbox', '--remote-debugging-pipe', 'about:blank'],
     {stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe']});
 const out = chrome.stdio[3], inp = chrome.stdio[4];
@@ -36,6 +38,12 @@ const send = (method, params = {}, sessionId) => new Promise(res => {
     }
     await send('Page.navigate', {url}, sessionId);
     await new Promise(r => setTimeout(r, 1500));
+    if (pdf) {
+        const p = await send('Page.printToPDF', {preferCSSPageSize: true, displayHeaderFooter: false}, sessionId);
+        fs.writeFileSync(pdfFile, Buffer.from(p.result.data, 'base64'));
+        chrome.kill();
+        process.exit(0);
+    }
     if (dump) {
         const d = await send('Runtime.evaluate', {expression: 'document.documentElement.outerHTML', returnByValue: true}, sessionId);
         console.log(d.result.result.value);
