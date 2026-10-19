@@ -1,0 +1,16 @@
+# Запуск arenda в Docker: docker compose up -d, интерфейс http://адрес:8080/
+# Данные (база и резервные копии) в томе arenda-data; ключ DaData вводится в веб-интерфейсе («Настройки»).
+services:
+  arenda:
+    image: ghcr.io/khromenokroman/arenda:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # часовой пояс для копий по расписанию (03:00 по местному времени)
+      TZ: Europe/Moscow
+    volumes:
+      - arenda-data:/data
+
+volumes:
+  arenda-data:
