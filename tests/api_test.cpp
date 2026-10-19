@@ -134,6 +134,7 @@ TEST(Api, ServesWebDir) {
  */
 TEST(Api, MissingWebDirFails) {
     Database db{":memory:"};
+    migrate(db);
     Api api{db, "/nonexistent/arenda-web"};
     httplib::Server server;
     try {
@@ -612,4 +613,55 @@ TEST(Api, Backups) {
     ASSERT_TRUE(res);
     ASSERT_EQ(res->status, 200) << res->body;
     EXPECT_EQ(nlohmann::json::parse(res->body).at("backups").size(), 0U);
+}
+
+/**
+ * @brief Ключ DaData в «Настройках»: только администратор, ключ целиком не отдаётся, ключ из «Настроек»
+ * важнее переменной окружения, удаление возвращает к переменной.
+ */
+TEST(Api, DadataKeySetting) {
+    fake::FakeDaData dadata;
+    TestServer srv{{}, dadata.client("env-key")};
+    auto cli = srv.client();
+    constexpr char const JSON[] = "application/json";
+    auto const lookup = [&] { return cli.Get("/api/lookup/bank?bik=044525225"); };
+
+    auto res = cli.Get("/api/settings");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    EXPECT_EQ(nlohmann::json::parse(res->body).at("dadata").at("source"), "env") << res->body;
+    res = lookup();
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 502) << "ключ из окружения неверный для подставного DaData: " << res->body;
+    EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr("разделе «Настройки»"));
+
+    res = cli.Put("/api/settings/dadata", R"({"key": "  good  "})", JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    auto const state = nlohmann::json::parse(res->body).at("dadata");
+    EXPECT_EQ(state.at("source"), "web");
+    EXPECT_EQ(state.at("hint"), "…") << "короткий ключ не показывается даже частично";
+    EXPECT_EQ(res->body.find("good"), std::string::npos) << "ключ целиком не уходит в браузер: " << res->body;
+    res = lookup();
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200) << "действует ключ из «Настроек»: " << res->body;
+
+    res = cli.Put("/api/settings/dadata", R"({"key": "a b"})", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << res->body;
+
+    res = cli.Post("/api/users", R"({"login": "olga", "password": "secret2"})", JSON);
+    ASSERT_TRUE(res);
+    res = srv.anonymous().Post("/api/auth/login", R"({"login": "olga", "password": "secret2"})", JSON);
+    ASSERT_TRUE(res);
+    res = srv.client_as(TestServer::cookie_of(*res)).Put("/api/settings/dadata", R"({"key": "x"})", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 403) << "ключ меняет только администратор: " << res->body;
+
+    res = cli.Put("/api/settings/dadata", R"({"key": ""})", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(nlohmann::json::parse(res->body).at("dadata").at("source"), "env") << "удаление возвращает ключ из окружения";
+    res = lookup();
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 502) << res->body;
 }

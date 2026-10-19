@@ -16,6 +16,7 @@
 #include "errors.hpp"
 #include "json_io.hpp"
 #include "schema.hpp"
+#include "settings.hpp"
 
 namespace {
 
@@ -136,6 +137,16 @@ std::string string_field(nlohmann::json const &j, char const *key) {
     return j[key].get<std::string>();
 }
 
+/// Ключ DaData в таблице settings.
+constexpr char const DADATA_KEY_SETTING[] = "dadata_key";
+constexpr std::size_t MAX_KEY = 100;
+
+/// Последние символы ключа для показа: «…a1b2»; весь ключ в браузер не уходит.
+std::string key_hint(std::string const &key) {
+    constexpr std::size_t SHOWN = 4;
+    return key.size() <= SHOWN ? std::string("…") : "…" + key.substr(key.size() - SHOWN);
+}
+
 /// Необязательное строковое поле запроса: нет - fallback. @throws UserError если оно не строка
 std::string optional_string(nlohmann::json const &j, char const *key, std::string fallback) {
     return j.contains(key) ? string_field(j, key) : std::move(fallback);
@@ -151,7 +162,14 @@ Api::Api(Database &db, std::string web_dir, DaData dadata, std::string backup_di
       m_tenants{db},
       m_equipment{db},
       m_contracts{db},
-      m_db{db} {}
+      m_db{db} {
+    m_web_key = Settings{db}.get(DADATA_KEY_SETTING);
+}
+
+DaData Api::dadata() {
+    std::lock_guard const lock{m_key_mutex};
+    return m_web_key.empty() ? m_dadata : m_dadata.with_key(m_web_key);
+}
 
 Api::Handler Api::guarded(Handler handler, bool lock_db) { return guarded(Access::USER, std::move(handler), lock_db); }
 
@@ -199,6 +217,7 @@ void Api::register_routes(httplib::Server &server) {
     register_tenants(server);
     register_lookup(server);
     register_contracts(server);
+    register_settings(server);
 
     if (!m_web_dir.empty() && !server.set_mount_point("/", m_web_dir)) {
         throw std::runtime_error("каталог веб-интерфейса не найден: " + m_web_dir);
@@ -324,14 +343,14 @@ void Api::register_lookup(httplib::Server &server) {
                                             if (inn.empty()) {
                                                 throw UserError("не указан ИНН");
                                             }
-                                            auto const data = m_dadata.find_party(inn);
+                                            auto const data = dadata().find_party(inn);
                                             send_json(res, {{"fields", party_fields(data, target)}});
                                         },
                                         false));
 
     server.Get("/api/lookup/bank", guarded(
                                        [this](httplib::Request const &req, httplib::Response &res) {
-                                           auto const data = m_dadata.find_bank(trim(req.get_param_value("bik")));
+                                           auto const data = dadata().find_bank(trim(req.get_param_value("bik")));
                                            send_json(res, {{"fields", bank_fields(data)}});
                                        },
                                        false));
@@ -557,5 +576,35 @@ void Api::register_backups(httplib::Server &server) {
                        }
                        return true;
                    });
+               }));
+}
+
+void Api::register_settings(httplib::Server &server) {
+    auto const state = [this] {
+        std::lock_guard const lock{m_key_mutex};
+        auto const &key = m_web_key.empty() ? m_dadata.key() : m_web_key;
+        auto const *const source = !m_web_key.empty() ? "web" : (m_dadata.key().empty() ? "none" : "env");
+        return nlohmann::json{{"dadata", {{"source", source}, {"hint", key.empty() ? "" : key_hint(key)}}}};
+    };
+
+    server.Get("/api/settings", guarded(Access::ADMIN, [state](httplib::Request const &, httplib::Response &res) { send_json(res, state()); }));
+
+    // ключ DaData: пустой удаляет ключ из «Настроек» (тогда действует переменная окружения, если задана)
+    server.Put("/api/settings/dadata", guarded(Access::ADMIN, [this, state](httplib::Request const &req, httplib::Response &res) {
+                   auto const key = trim(string_field(parse_object(req.body), "key"));
+                   if (key.size() > MAX_KEY || key.find_first_of(" \t\r\n\"'") != std::string::npos) {
+                       throw UserError("ключ DaData - строка из букв и цифр до " + std::to_string(MAX_KEY) + " символов, без пробелов и кавычек");
+                   }
+                   Settings settings{m_db};
+                   if (key.empty()) {
+                       settings.remove(DADATA_KEY_SETTING);
+                   } else {
+                       settings.set(DADATA_KEY_SETTING, key);
+                   }
+                   {
+                       std::lock_guard const lock{m_key_mutex};
+                       m_web_key = key;
+                   }
+                   send_json(res, state());
                }));
 }

@@ -2,6 +2,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "fields.hpp"
 
@@ -23,6 +24,11 @@ class DaData {
      * @param key API-ключ; пустой - запросы отклоняются с подсказкой, как его задать
      */
     DaData(std::string url, std::string key);
+
+    /// Тот же адрес с другим ключом.
+    [[nodiscard]] DaData with_key(std::string key) const { return DaData{m_url, std::move(key)}; }
+
+    [[nodiscard]] std::string const &key() const { return m_key; }
 
     /**
      * @brief Данные основной организации или ИП по ИНН: поле data первой подсказки.

@@ -52,6 +52,7 @@ add_library(${PROJECT_NAME}-core STATIC
         src/options.cpp
         src/requisites.cpp
         src/schema.cpp
+        src/settings.cpp
         src/tenants.cpp
         src/users.cpp
 )

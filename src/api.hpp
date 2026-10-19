@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <string>
 
@@ -28,7 +29,7 @@ struct Response;
 class Api {
    public:
     /**
-     * @param db база, к которой обращаются обработчики
+     * @param db база после migrate(), к которой обращаются обработчики; из неё читается ключ DaData из «Настроек»
      * @param web_dir каталог статических страниц; пустой, если раздавать не нужно
      * @param dadata клиент DaData для заполнения реквизитов; без ключа заполнение отвечает подсказкой
      * @param backup_dir каталог резервных копий
@@ -68,10 +69,16 @@ class Api {
     void register_tenants(httplib::Server &server);
     void register_lookup(httplib::Server &server);
     void register_contracts(httplib::Server &server);
+    void register_settings(httplib::Server &server);
+
+    /// Клиент DaData с ключом из «Настроек», а если он не задан - из переменной окружения.
+    [[nodiscard]] DaData dadata();
 
     std::optional<User> m_user; ///< вошедший пользователь текущего запроса; меняется только под блокировкой базы
     std::string m_web_dir;
-    DaData m_dadata;
+    DaData m_dadata;       ///< адрес и ключ из переменной окружения
+    std::string m_web_key; ///< ключ DaData из «Настроек»; читается и меняется под m_key_mutex
+    std::mutex m_key_mutex;
     Backups m_backups;
     Landlords m_landlords;
     Tenants m_tenants;

@@ -89,7 +89,9 @@ nlohmann::json DaData::find_bank(std::string const &bik) const {
 
 nlohmann::json DaData::find_by_id(std::string_view method, std::string const &query, std::string const &what) const {
     if (m_key.empty()) {
-        throw UserError("не задан ключ DaData: укажите API-ключ из личного кабинета dadata.ru в переменной окружения ARENDA_DADATA_KEY");
+        throw UserError(
+            "не задан ключ DaData: администратор вводит API-ключ из личного кабинета dadata.ru в разделе «Настройки» "
+            "(или переменная окружения ARENDA_DADATA_KEY)");
     }
     auto const [host, prefix] = split_url(m_url);
     httplib::Client cli{host};
@@ -105,7 +107,7 @@ nlohmann::json DaData::find_by_id(std::string_view method, std::string const &qu
         throw ExternalError("DaData не отвечает (" + httplib::to_string(res.error()) + "), заполните поля вручную");
     }
     if (res->status == HTTP_UNAUTHORIZED || res->status == HTTP_FORBIDDEN) {
-        throw ExternalError("DaData отклонил ключ (HTTP " + std::to_string(res->status) + "): проверьте ARENDA_DADATA_KEY");
+        throw ExternalError("DaData отклонил ключ (HTTP " + std::to_string(res->status) + "): проверьте ключ в разделе «Настройки»");
     }
     if (res->status == HTTP_TOO_MANY) {
         throw ExternalError("исчерпан лимит запросов DaData (HTTP 429), попробуйте позже");

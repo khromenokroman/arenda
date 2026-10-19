@@ -42,6 +42,7 @@ const MENU = [
     {path: 'tenants', title: 'Арендаторы'},
     {path: 'users', title: 'Пользователи', admin: true},
     {path: 'backups', title: 'Копии', admin: true},
+    {path: 'settings', title: 'Настройки', admin: true},
 ];
 
 /** Страницы: шаблон адреса и функция отрисовки, параметры из адреса передаются по порядку. */
@@ -56,6 +57,7 @@ const ROUTES = [
     {re: /^users$/, render: renderUsers},
     {re: /^password$/, render: renderPassword},
     {re: /^backups$/, render: renderBackups},
+    {re: /^settings$/, render: renderSettings},
 ];
 
 let landlordSpecs = null;
@@ -817,6 +819,65 @@ async function renderBackups(page, params = null, state = null) {
             showMessage(e.message);
         }
     }));
+}
+
+async function renderSettings(page) {
+    const {dadata} = await api('GET', '/api/settings');
+    const state = {
+        web: `ключ задан здесь (${dadata.hint})`,
+        env: `ключ задан в настройках службы, переменная ARENDA_DADATA_KEY (${dadata.hint}); ключ, введённый здесь, будет важнее`,
+        none: 'ключ не задан: кнопки «Заполнить по ИНН/БИК» не работают',
+    }[dadata.source];
+    page.innerHTML = `<h2>Настройки</h2>
+        <form class="card" id="dadata">
+            <fieldset><legend>DaData: заполнение по ИНН и БИК</legend>
+                <p>Сейчас: ${esc(state)}.</p>
+                <p class="muted">API-ключ берётся в личном кабинете dadata.ru (раздел профиля), секретный ключ не нужен.
+                    Ключ хранится в базе и попадает в резервные копии.</p>
+                <label><span>Новый API-ключ</span><input name="key" type="password" autocomplete="off" placeholder="вставьте ключ"></label>
+            </fieldset>
+            <div class="actions">
+                <button type="submit">Сохранить ключ</button>
+                <button type="button" id="check">Проверить</button>
+                ${dadata.source === 'web' ? '<button type="button" class="danger" id="remove-key">Удалить ключ</button>' : ''}
+            </div>
+        </form>`;
+    const form = page.querySelector('#dadata');
+    const save = async (key, text) => {
+        try {
+            await api('PUT', '/api/settings/dadata', {key});
+            await renderSettings(page);
+            showMessage(text, false);
+        } catch (e) {
+            showMessage(e.message);
+        }
+    };
+    form.addEventListener('submit', event => {
+        event.preventDefault();
+        const key = form.key.value.trim();
+        if (!key) {
+            showMessage('вставьте ключ');
+            return;
+        }
+        save(key, 'Ключ DaData сохранён. Нажмите «Проверить».');
+    });
+    const remove = page.querySelector('#remove-key');
+    if (remove) {
+        remove.addEventListener('click', () => {
+            if (confirm('Удалить ключ DaData из настроек?')) {
+                save('', 'Ключ DaData удалён');
+            }
+        });
+    }
+    page.querySelector('#check').addEventListener('click', async () => {
+        try {
+            // известный БИК (ПАО Сбербанк): запрос только проверяет, что ключ принимается
+            const {fields} = await api('GET', '/api/lookup/bank?bik=044525225');
+            showMessage(`Ключ работает: DaData ответил (${fields.bank})`, false);
+        } catch (e) {
+            showMessage(e.message);
+        }
+    });
 }
 
 async function renderPassword(page) {
