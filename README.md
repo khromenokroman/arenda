@@ -4,7 +4,7 @@
 пользователь ведёт справочники арендодателей и арендаторов, заполняет условия договора и получает
 готовый к печати договор.
 
-Состояние: справочники, заполнение по ИНН, создание договоров с делением срока, печать, пакет deb, вход по паролю, резервные копии, отбор договоров, ключ DaData в настройках (версия 0.15.0.0).
+Состояние: справочники, заполнение по ИНН, создание договоров с делением срока, печать, пакет deb, вход по паролю, резервные копии, отбор договоров, ключ DaData в настройках, образ Docker (версия 0.16.0.0).
 
 ## Вход
 
@@ -184,6 +184,26 @@ ARENDA_DADATA_KEY="ключ"                     # необязательно: �
 Выпуск: тег `vX.Y.Z.W`, совпадающий с версией в `CMakeLists.txt`, запускает CI, который собирает пакеты,
 проверяет установку в контейнерах с systemd и публикует релиз.
 
+## Docker
+
+Образ `ghcr.io/khromenokroman/arenda` (теги версий и `latest`, 84 МБ, Debian 13 slim, работает от
+пользователя uid 10001). Установка на машине с Docker:
+
+```sh
+sudo apt install docker.io docker-compose
+mkdir arenda && cd arenda
+wget https://raw.githubusercontent.com/khromenokroman/arenda/master/docker-compose.yml
+sudo docker-compose up -d
+```
+
+Интерфейс: http://адрес:8080/, при первом входе создаётся администратор, ключ DaData вводится в «Настройках».
+База и резервные копии в томе `arenda-data` (`/data` в контейнере). Часовой пояс для копий по расписанию
+задаётся `TZ` в `docker-compose.yml`. Обновление: `sudo docker-compose pull && sudo docker-compose up -d`.
+Копию тома на другой носитель: `sudo docker run --rm -v arenda_arenda-data:/data -v "$PWD":/out debian:trixie-slim
+tar czf /out/arenda-data.tgz -C /data .`
+
+Проверка образа: `docker build -t arenda:test . && tests/docker_run.sh arenda:test`.
+
 ## Сборка
 
 Debian 12 или 13:
@@ -220,7 +240,7 @@ cpp-httplib лежит в `third_party/httplib.h` (header-only, v0.18.7, лиц�
 
 | Метод | Путь | Ответ |
 |---|---|---|
-| GET | `/api/version` | `{"version": "0.15.0.0", "schema": 8}` |
+| GET | `/api/version` | `{"version": "0.16.0.0", "schema": 8}` |
 | GET | `/api/landlords/fields` | описание полей карточки: `[{"key", "label", "group", "hint", "required", "input", "choices"}]` |
 | GET | `/api/landlords` | список `[{"id", поля...}]` по краткому наименованию |
 | POST | `/api/landlords` | создать из `{"поле": "значение"}`, ответ 201 с карточкой |
