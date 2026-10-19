@@ -3,8 +3,8 @@
 #include <span>
 #include <string>
 
+#include "card_store.hpp"
 #include "fields.hpp"
-#include "landlords.hpp"
 
 /**
  * @brief Разбирает тело запроса как JSON-объект.
@@ -22,4 +22,4 @@
 [[nodiscard]] nlohmann::json to_json(std::span<FieldSpec const> specs);
 
 /// {"id": N, поля...}.
-[[nodiscard]] nlohmann::json to_json(Landlord const &landlord);
+[[nodiscard]] nlohmann::json to_json(Card const &card);

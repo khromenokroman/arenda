@@ -35,9 +35,9 @@ nlohmann::json to_json(std::span<FieldSpec const> specs) {
     return out;
 }
 
-nlohmann::json to_json(Landlord const &landlord) {
-    nlohmann::json out = {{"id", landlord.id}};
-    for (auto const &[key, value] : landlord.fields) {
+nlohmann::json to_json(Card const &card) {
+    nlohmann::json out = {{"id", card.id}};
+    for (auto const &[key, value] : card.fields) {
         out[key] = value;
     }
     return out;

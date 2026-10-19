@@ -37,3 +37,12 @@ Fields clean_fields(std::span<FieldSpec const> specs, Fields const &values) {
     }
     return out;
 }
+
+std::vector<std::string> keys(std::span<FieldSpec const> specs) {
+    std::vector<std::string> out;
+    out.reserve(specs.size());
+    for (auto const &spec : specs) {
+        out.emplace_back(spec.key);
+    }
+    return out;
+}

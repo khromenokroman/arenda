@@ -48,67 +48,19 @@ constexpr std::array SPECS = {
         .key = "municipality_gen", .label = "Муниципальное образование в родительном падеже", .group = OBJECT, .hint = "городского округа Химки"},
 };
 
-/// Список колонок полей через запятую в порядке SPECS.
-std::string columns() {
-    std::string out;
-    for (auto const &spec : SPECS) {
-        out += out.empty() ? "" : ", ";
-        out += spec.key;
-    }
-    return out;
-}
-
-Landlord read(Statement const &stmt) {
-    Landlord landlord;
-    landlord.id = stmt.column_int(0);
-    for (std::size_t i = 0; i < SPECS.size(); ++i) {
-        landlord.fields.emplace(SPECS.at(i).key, stmt.column_text(static_cast<int>(i) + 1));
-    }
-    return landlord;
-}
-
-/// Привязывает значения полей к параметрам 1..N в порядке SPECS.
-void bind_fields(Statement &stmt, Fields const &fields) {
-    for (std::size_t i = 0; i < SPECS.size(); ++i) {
-        stmt.bind(static_cast<int>(i) + 1, fields.at(std::string(SPECS.at(i).key)));
-    }
-}
-
 } // namespace
 
-Landlords::Landlords(Database &db) : m_db{db} {}
+Landlords::Landlords(Database &db) : m_store{db, "landlords", keys(SPECS), "name_short COLLATE NOCASE, id", "нет арендодателя"}, m_db{db} {}
 
 std::span<FieldSpec const> Landlords::specs() { return SPECS; }
 
-std::vector<Landlord> Landlords::list() const {
-    auto stmt = m_db.prepare("SELECT id, " + columns() + " FROM landlords ORDER BY name_short COLLATE NOCASE, id");
-    std::vector<Landlord> out;
-    while (stmt.step()) {
-        out.push_back(read(stmt));
-    }
-    return out;
-}
+std::vector<Landlord> Landlords::list() const { return m_store.list(); }
 
-Landlord Landlords::get(std::int64_t id) const {
-    auto stmt = m_db.prepare("SELECT id, " + columns() + " FROM landlords WHERE id = ?");
-    stmt.bind(1, id);
-    if (!stmt.step()) {
-        throw NotFoundError("нет арендодателя с id " + std::to_string(id));
-    }
-    return read(stmt);
-}
+Landlord Landlords::get(std::int64_t id) const { return m_store.get(id); }
 
 std::int64_t Landlords::create(Fields const &fields) {
     Transaction tx{m_db};
-    auto const clean_values = clean(fields, 0);
-    std::string params;
-    for (std::size_t i = 0; i < SPECS.size(); ++i) {
-        params += i == 0 ? "?" : ", ?";
-    }
-    auto stmt = m_db.prepare("INSERT INTO landlords (" + columns() + ") VALUES (" + params + ")");
-    bind_fields(stmt, clean_values);
-    stmt.step();
-    auto const id = m_db.last_insert_id();
+    auto const id = m_store.insert(clean(fields, 0));
     tx.commit();
     return id;
 }
@@ -119,25 +71,13 @@ void Landlords::update(std::int64_t id, Fields const &changes) {
     for (auto const &[key, value] : changes) {
         values[key] = value;
     }
-    auto const clean_values = clean(values, id);
-    std::string assignments;
-    for (auto const &spec : SPECS) {
-        assignments += assignments.empty() ? "" : ", ";
-        assignments += std::string(spec.key) + " = ?";
-    }
-    auto stmt = m_db.prepare("UPDATE landlords SET " + assignments + " WHERE id = ?");
-    bind_fields(stmt, clean_values);
-    stmt.bind(static_cast<int>(SPECS.size()) + 1, id);
-    stmt.step();
+    m_store.update(id, clean(values, id));
     tx.commit();
 }
 
 void Landlords::remove(std::int64_t id) {
     Transaction tx{m_db};
-    (void)get(id);
-    auto stmt = m_db.prepare("DELETE FROM landlords WHERE id = ?");
-    stmt.bind(1, id);
-    stmt.step();
+    m_store.remove(id);
     tx.commit();
 }
 

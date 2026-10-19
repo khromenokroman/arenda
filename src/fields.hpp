@@ -5,6 +5,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 /// Значения полей карточки по ключу поля.
 using Fields = std::map<std::string, std::string, std::less<>>;
@@ -28,6 +29,9 @@ struct FieldSpec {
  * @throws UserError неизвестное поле, пустое обязательное, слишком длинное или не прошедшее проверку
  */
 [[nodiscard]] Fields clean_fields(std::span<FieldSpec const> specs, Fields const &values);
+
+/// Ключи полей в порядке описания.
+[[nodiscard]] std::vector<std::string> keys(std::span<FieldSpec const> specs);
 
 /// Убирает пробельные символы по краям.
 [[nodiscard]] std::string trim(std::string_view text);

@@ -24,6 +24,7 @@ set(ARENDA_WEB_DIR "${CMAKE_INSTALL_FULL_DATADIR}/${PROJECT_NAME}/web")
 
 add_library(${PROJECT_NAME}-core STATIC
         src/api.cpp
+        src/card_store.cpp
         src/db.cpp
         src/fields.cpp
         src/json_io.cpp
