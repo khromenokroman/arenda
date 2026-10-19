@@ -53,7 +53,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            ca-certificates git build-essential cmake curl chromium nodejs \
+            ca-certificates git build-essential cmake curl chromium nodejs fonts-liberation poppler-utils \
             libsqlite3-dev libssl-dev nlohmann-json3-dev libgtest-dev libgmock-dev
 
       - name: Checkout
@@ -92,3 +92,6 @@ jobs:
 
       - name: Web scenarios in headless browser
         run: tests/web_e2e.sh ./build/arenda web
+
+      - name: Print form fits 4 pages
+        run: tests/print_pages.sh ./build/arenda web
