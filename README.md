@@ -4,7 +4,7 @@
 пользователь ведёт справочники арендодателей и арендаторов, заполняет условия договора и получает
 готовый к печати договор.
 
-Состояние: справочники, заполнение по ИНН, создание договоров с делением срока, печать, пакет deb, вход по паролю (версия 0.11.0.0).
+Состояние: справочники, заполнение по ИНН, создание договоров с делением срока, печать, пакет deb, вход по паролю, резервные копии (версия 0.12.0.0).
 
 ## Вход
 
@@ -22,6 +22,25 @@ HttpOnly, SameSite=Strict. Последнего действующего адм�
 ```sh
 sudo systemctl stop arenda
 sudo -u arenda sqlite3 /var/lib/arenda/arenda.db "DELETE FROM sessions; DELETE FROM users;"
+sudo systemctl start arenda
+```
+
+## Резервные копии
+
+Раздел «Копии» (администратор): «Сделать копию сейчас», список копий со скачиванием и удалением, расписание.
+По умолчанию копия делается каждый день в 03:00, хранятся 14 последних копий по расписанию, ручные не
+удаляются; если в это время сервер выключен, копия сделается после включения в тот же день. Копия - целый
+файл базы SQLite (`VACUUM INTO`, без остановки работы) в каталоге `backups` рядом с базой, в пакете
+`/var/lib/arenda/backups` (ключ `--backup-dir` меняет каталог). Копии на том же диске не спасут при отказе
+диска: скачивайте их или копируйте каталог на другой носитель.
+
+Восстановление из копии (текущая база откладывается рядом):
+
+```sh
+sudo systemctl stop arenda
+cd /var/lib/arenda
+sudo -u arenda mkdir -p replaced && sudo -u arenda mv arenda.db* replaced/
+sudo -u arenda cp backups/arenda-20261019-030000-auto.db arenda.db
 sudo systemctl start arenda
 ```
 
@@ -182,6 +201,7 @@ cpp-httplib лежит в `third_party/httplib.h` (header-only, v0.18.7, лиц�
 | `--host АДРЕС` | `127.0.0.1` | адрес для входящих соединений; `0.0.0.0` открывает доступ из сети |
 | `--port ПОРТ` | `8080` | порт HTTP |
 | `--web КАТАЛОГ` | `/usr/share/arenda/web` | каталог страниц интерфейса |
+| `--backup-dir КАТАЛОГ` | `backups` рядом с базой | каталог резервных копий |
 | `--dadata-url АДРЕС` | `https://suggestions.dadata.ru/suggestions/api/4_1/rs` | API подсказок DaData (для тестов) |
 
 Входа по паролю нет: при `--host 0.0.0.0` справочники и договоры видны всем в сети.
@@ -190,7 +210,7 @@ cpp-httplib лежит в `third_party/httplib.h` (header-only, v0.18.7, лиц�
 
 | Метод | Путь | Ответ |
 |---|---|---|
-| GET | `/api/version` | `{"version": "0.11.0.0", "schema": 7}` |
+| GET | `/api/version` | `{"version": "0.12.0.0", "schema": 7}` |
 | GET | `/api/landlords/fields` | описание полей карточки: `[{"key", "label", "group", "hint", "required", "input", "choices"}]` |
 | GET | `/api/landlords` | список `[{"id", поля...}]` по краткому наименованию |
 | POST | `/api/landlords` | создать из `{"поле": "значение"}`, ответ 201 с карточкой |
@@ -219,7 +239,8 @@ cpp-httplib лежит в `third_party/httplib.h` (header-only, v0.18.7, лиц�
 Без входа доступны только `/api/version`, `/api/auth` (состояние: `setup`, `user`), `/api/auth/setup`
 (первый администратор) и `/api/auth/login`; остальное отвечает 401. Сессия в cookie `arenda_session`.
 `/api/auth/logout`, `PUT /api/auth/password` (`old_password`, `password`); администратору `GET/POST /api/users`,
-`PUT /api/users/{id}` (`name`, `role`: `admin`/`user`, `blocked`, `password`).
+`PUT /api/users/{id}` (`name`, `role`: `admin`/`user`, `blocked`, `password`); копии: `GET/POST /api/backups`,
+`PUT /api/backups/schedule` (`enabled`, `time`, `keep`), `GET/DELETE /api/backups/{имя}` (скачать/удалить).
 
 Ошибки приходят как `{"error": "текст"}` с кодом 400 (неверные данные), 401 (нужно войти), 403 (нет прав), 404 (нет объекта или метода),
 502 (DaData недоступен или отклонил ключ), 500.
