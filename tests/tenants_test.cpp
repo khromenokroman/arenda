@@ -28,8 +28,8 @@ Fields org() {
 }
 
 Fields person() {
-    return {{"kind", "person"},           {"name", "Сидорова Анна Сергеевна"}, {"gender", "f"},
-            {"birth_date", "1990-05-17"}, {"passport", "4510 123456"},         {"passport_code", "770-001"}};
+    return {{"kind", "person"},          {"name", "Сидорова Анна Сергеевна"}, {"gender", "f"},        {"birth_date", "1990-05-17"},
+            {"passport", "4510 123456"}, {"passport_code", "770-001"},        {"inn", "526317984689"}};
 }
 
 class TenantsTest : public testing::Test {
@@ -176,4 +176,36 @@ TEST_F(TenantsTest, RemoveAndNotFound) {
     EXPECT_THROW_REASON((void)m_tenants.get(id), NotFoundError, "нет арендатора с id");
     EXPECT_THROW_REASON(m_tenants.update(id, {}), NotFoundError, "нет арендатора");
     EXPECT_THROW_REASON(m_tenants.remove(id), NotFoundError, "нет арендатора");
+}
+
+/**
+ * @brief ИНН обязателен у всех видов и не повторяется: по нему строится номер договора.
+ */
+TEST_F(TenantsTest, InnRequiredAndUnique) {
+    auto f = person();
+    f.erase("inn");
+    EXPECT_THROW_REASON(m_tenants.create(f), UserError, "Физическое лицо: не заполнено поле «ИНН»");
+    auto const id = m_tenants.create(ip());
+    f = person();
+    f["inn"] = "500100732259";
+    EXPECT_THROW_REASON(m_tenants.create(f), UserError, "арендатор с ИНН 500100732259 уже есть: «ИП Петров Пётр Петрович»");
+    EXPECT_NO_THROW(m_tenants.update(id, {{"phone", "1"}})) << "свой ИНН не дубликат";
+}
+
+/**
+ * @brief Арендуемое место: площади и этаж проверяются, текстовые поля сохраняются.
+ */
+TEST_F(TenantsTest, Place) {
+    auto f = ip();
+    f["area"] = "12,5";
+    f["trade_area"] = "10";
+    f["floor"] = "2";
+    f["purpose"] = "оказания услуг по металлоремонту";
+    f["activity_gen"] = "металлоремонта";
+    auto const id = m_tenants.create(f);
+    EXPECT_EQ(m_tenants.get(id).fields.at("activity_gen"), "металлоремонта");
+    EXPECT_THROW_REASON(m_tenants.update(id, {{"area", "0"}}), UserError, "площадь должна быть больше нуля");
+    EXPECT_THROW_REASON(m_tenants.update(id, {{"trade_area", "десять"}}), UserError, "нужно число");
+    EXPECT_THROW_REASON(m_tenants.update(id, {{"floor", "2,5"}}), UserError, "этаж: нужно целое число");
+    EXPECT_THROW_REASON(m_tenants.update(id, {{"floor", "300"}}), UserError, "этаж: нужно число от -5 до 200");
 }

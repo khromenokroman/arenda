@@ -5,6 +5,7 @@
 
 #include "dates.hpp"
 #include "errors.hpp"
+#include "numbers.hpp"
 #include "requisites.hpp"
 
 namespace {
@@ -13,6 +14,7 @@ constexpr std::string_view MAIN = "Основное";
 constexpr std::string_view PASSPORT = "Паспорт";
 constexpr std::string_view SIGNER = "Подписант";
 constexpr std::string_view BANK = "Банк";
+constexpr std::string_view PLACE = "Арендуемое место";
 
 constexpr std::size_t LONG_TEXT = 1000;
 
@@ -25,16 +27,48 @@ constexpr FieldSpec ACCOUNT{.key = "account", .label = "Расчётный сч�
 constexpr FieldSpec BANK_NAME{.key = "bank", .label = "Банк", .group = BANK, .hint = "ПАО «Банк»"};
 constexpr FieldSpec BIK{.key = "bik", .label = "БИК", .group = BANK, .hint = "9 цифр", .check = requisites::check_bik};
 
+/// Площадь в кв. м: положительное число с двумя знаками после запятой.
+void check_area(std::string const &text) {
+    if (numbers::parse_hundredths(text, "площадь") <= 0) {
+        throw UserError("площадь должна быть больше нуля: «" + text + "»");
+    }
+}
+
+void check_floor(std::string const &text) { (void)numbers::parse_int(text, "этаж", MIN_FLOOR, MAX_FLOOR); }
+
+constexpr FieldSpec AREA{.key = "area", .label = "Площадь по напольной плитке, кв. м", .group = PLACE, .hint = "12,5", .check = check_area};
+constexpr FieldSpec TRADE_AREA{
+    .key = "trade_area", .label = "Площадь для торговли (гл. 26.5 НК РФ), кв. м", .group = PLACE, .hint = "10", .check = check_area};
+constexpr FieldSpec FLOOR{.key = "floor", .label = "Этаж", .group = PLACE, .hint = "1", .check = check_floor};
+constexpr FieldSpec PURPOSE{.key = "purpose",
+                            .label = "Назначение помещения (п. 1.3: «для ...»)",
+                            .group = PLACE,
+                            .hint = "оказания услуг по металлоремонту (изготовление ключей, ремонт мелких металлических изделий)",
+                            .max_size = LONG_TEXT};
+constexpr FieldSpec ACTIVITY{
+    .key = "activity_gen", .label = "Вид деятельности коротко (п. 2.1.2: «необходимые для ...»)", .group = PLACE, .hint = "металлоремонта"};
+constexpr FieldSpec CONDITION{.key = "premises_condition",
+                              .label = "Состояние помещения при передаче",
+                              .group = PLACE,
+                              .hint = "удовлетворительное, пригодно для использования по назначению",
+                              .max_size = LONG_TEXT};
+
 constexpr std::array IP_SPECS = {
     PERSON_NAME,
     GENDER,
     FieldSpec{.key = "ogrnip", .label = "ОГРНИП", .group = MAIN, .hint = "15 цифр", .check = requisites::check_ogrnip},
-    FieldSpec{.key = "inn", .label = "ИНН", .group = MAIN, .hint = "12 цифр", .check = requisites::check_inn_person},
+    FieldSpec{.key = "inn", .label = "ИНН", .group = MAIN, .hint = "12 цифр", .check = requisites::check_inn_person, .required = true},
     FieldSpec{.key = "address", .label = "Адрес", .group = MAIN, .hint = "Московская обл., г. Химки, ул. Ленина, д. 1, кв. 1", .max_size = LONG_TEXT},
     PHONE,
     ACCOUNT,
     BANK_NAME,
     BIK,
+    AREA,
+    TRADE_AREA,
+    FLOOR,
+    PURPOSE,
+    ACTIVITY,
+    CONDITION,
 };
 
 constexpr std::array ORG_SPECS = {
@@ -46,7 +80,7 @@ constexpr std::array ORG_SPECS = {
               .required = true},
     FieldSpec{.key = "name_short", .label = "Краткое наименование", .group = MAIN, .hint = "ООО «Ромашка»", .required = true},
     FieldSpec{.key = "ogrn", .label = "ОГРН", .group = MAIN, .hint = "13 цифр", .check = requisites::check_ogrn},
-    FieldSpec{.key = "inn", .label = "ИНН", .group = MAIN, .hint = "10 цифр", .check = requisites::check_inn_org},
+    FieldSpec{.key = "inn", .label = "ИНН", .group = MAIN, .hint = "10 цифр", .check = requisites::check_inn_org, .required = true},
     FieldSpec{.key = "kpp", .label = "КПП", .group = MAIN, .hint = "9 знаков", .check = requisites::check_kpp},
     FieldSpec{.key = "address", .label = "Адрес", .group = MAIN, .hint = "Московская обл., г. Химки, ул. Ленина, д. 1", .max_size = LONG_TEXT},
     PHONE,
@@ -58,13 +92,19 @@ constexpr std::array ORG_SPECS = {
     ACCOUNT,
     BANK_NAME,
     BIK,
+    AREA,
+    TRADE_AREA,
+    FLOOR,
+    PURPOSE,
+    ACTIVITY,
+    CONDITION,
 };
 
 constexpr std::array PERSON_SPECS = {
     PERSON_NAME,
     GENDER,
     FieldSpec{.key = "birth_date", .label = "Дата рождения", .group = MAIN, .hint = "", .check = check_date, .input = Input::DATE},
-    FieldSpec{.key = "inn", .label = "ИНН", .group = MAIN, .hint = "12 цифр, если есть", .check = requisites::check_inn_person},
+    FieldSpec{.key = "inn", .label = "ИНН", .group = MAIN, .hint = "12 цифр", .check = requisites::check_inn_person, .required = true},
     FieldSpec{.key = "address",
               .label = "Адрес регистрации",
               .group = MAIN,
@@ -79,6 +119,12 @@ constexpr std::array PERSON_SPECS = {
     ACCOUNT,
     BANK_NAME,
     BIK,
+    AREA,
+    TRADE_AREA,
+    FLOOR,
+    PURPOSE,
+    ACTIVITY,
+    CONDITION,
 };
 
 constexpr std::array KINDS = {
@@ -138,7 +184,9 @@ std::int64_t Tenants::create(Fields const &fields) {
     auto input = fields;
     input.erase("kind");
     Transaction tx{m_db};
-    auto const id = m_store.insert(clean(kind_it->second, input));
+    auto const clean_values = clean(kind_it->second, input);
+    check_unique_inn(clean_values.at("inn"), 0);
+    auto const id = m_store.insert(clean_values);
     tx.commit();
     return id;
 }
@@ -158,7 +206,9 @@ void Tenants::update(std::int64_t id, Fields const &changes) {
             input.insert_or_assign(key, value);
         }
     }
-    m_store.update(id, clean(kind_code, input));
+    auto const clean_values = clean(kind_code, input);
+    check_unique_inn(clean_values.at("inn"), id);
+    m_store.update(id, clean_values);
     tx.commit();
 }
 
@@ -179,4 +229,12 @@ Fields Tenants::clean(std::string const &kind_code, Fields const &fields) {
     requisites::check_account_bik(out.at("account"), out.at("bik"));
     out.emplace("kind", kind_code);
     return out;
+}
+
+void Tenants::check_unique_inn(std::string const &inn, std::int64_t id) const {
+    auto stmt = m_db.prepare("SELECT id FROM tenants WHERE inn = ? AND id <> ?");
+    stmt.bind(1, inn).bind(2, id);
+    if (stmt.step()) {
+        throw UserError("арендатор с ИНН " + inn + " уже есть: «" + title(get(stmt.column_int(0))) + "»");
+    }
 }

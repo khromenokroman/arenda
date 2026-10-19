@@ -36,8 +36,9 @@ EMPTY_TENANTS=$(dump_page tenants)
 LANDLORD=$(call POST landlords '{"name_full":"Общество с ограниченной ответственностью «Ромашка»","name_short":"ООО «Ромашка» <b>","inn":"7707083893"}' | id)
 
 IP=$(call POST tenants '{"kind":"ip","name":"Петров Пётр <b>","gender":"m","inn":"500100732259"}' | id)
-ORG=$(call POST tenants '{"kind":"org","name_full":"ООО «Берёза»","name_short":"ООО «Берёза» <b>"}' | id)
-PERSON=$(call POST tenants '{"kind":"person","name":"Сидорова Анна <b>","gender":"f","birth_date":"1990-05-17"}' | id)
+ORG=$(call POST tenants '{"kind":"org","name_full":"ООО «Берёза»","name_short":"ООО «Берёза» <b>","inn":"7707083893"}' | id)
+PERSON=$(call POST tenants '{"kind":"person","name":"Сидорова Анна <b>","gender":"f","birth_date":"1990-05-17","inn":"526317984689"}' | id)
+call PUT "tenants/$IP/equipment" '[{"name":"Станок <b>","model":"Silca","power":"0,55","qty":1}]' >/dev/null
 
 PAGES=(
     ""

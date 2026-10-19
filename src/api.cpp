@@ -68,7 +68,7 @@ nlohmann::json tenant_json(Tenant const &tenant) {
 } // namespace
 
 Api::Api(Database &db, std::string web_dir, DaData dadata)
-    : m_web_dir{std::move(web_dir)}, m_dadata{std::move(dadata)}, m_landlords{db}, m_tenants{db}, m_db{db} {}
+    : m_web_dir{std::move(web_dir)}, m_dadata{std::move(dadata)}, m_landlords{db}, m_tenants{db}, m_equipment{db}, m_db{db} {}
 
 Api::Handler Api::guarded(Handler handler, bool lock_db) {
     return [this, lock_db, handler = std::move(handler)](httplib::Request const &req, httplib::Response &res) {
@@ -179,6 +179,28 @@ void Api::register_tenants(httplib::Server &server) {
                    auto const id = path_id(req);
                    m_tenants.update(id, fields_from_json(parse_object(req.body)));
                    send_json(res, tenant_json(m_tenants.get(id)));
+               }));
+
+    server.Get("/api/tenants/:id/equipment", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                   auto out = nlohmann::json::array();
+                   for (auto const &row : m_equipment.list(path_id(req))) {
+                       out.push_back(to_json(row));
+                   }
+                   send_json(res, out);
+               }));
+
+    server.Put("/api/tenants/:id/equipment", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                   auto const id = path_id(req);
+                   auto const body = nlohmann::json::parse(req.body, nullptr, false);
+                   if (body.is_discarded()) {
+                       throw UserError("тело запроса не JSON");
+                   }
+                   m_equipment.replace(id, equipment_from_json(body));
+                   auto out = nlohmann::json::array();
+                   for (auto const &row : m_equipment.list(id)) {
+                       out.push_back(to_json(row));
+                   }
+                   send_json(res, out);
                }));
 
     server.Delete("/api/tenants/:id", guarded([this](httplib::Request const &req, httplib::Response &res) {

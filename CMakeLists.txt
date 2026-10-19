@@ -32,6 +32,7 @@ add_library(${PROJECT_NAME}-core STATIC
         src/dadata.cpp
         src/dates.cpp
         src/db.cpp
+        src/equipment.cpp
         src/fields.cpp
         src/json_io.cpp
         src/landlords.cpp
@@ -64,6 +65,7 @@ if (BUILD_TESTS)
             tests/dadata_test.cpp
             tests/dates_test.cpp
             tests/db_test.cpp
+            tests/equipment_test.cpp
             tests/landlords_test.cpp
             tests/names_test.cpp
             tests/numbers_test.cpp

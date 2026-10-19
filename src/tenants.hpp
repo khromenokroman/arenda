@@ -9,6 +9,10 @@
 #include "db.hpp"
 #include "fields.hpp"
 
+/// Границы этажа: подвальные этажи отрицательные.
+constexpr int MIN_FLOOR = -5;
+constexpr int MAX_FLOOR = 200;
+
 /// Арендатор: поле kind (вид) и поля по описанию этого вида из Tenants::kinds().
 using Tenant = Card;
 
@@ -59,6 +63,9 @@ class Tenants {
     void remove(std::int64_t id);
 
    private:
+    /// @throws UserError если ИНН занят другим арендатором (по ИНН строится номер договора)
+    void check_unique_inn(std::string const &inn, std::int64_t id) const;
+
     /// Проверенные поля вида kind вместе с самим kind.
     [[nodiscard]] static Fields clean(std::string const &kind, Fields const &fields);
 

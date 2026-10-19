@@ -76,3 +76,15 @@ button:disabled { opacity: 0.6; cursor: wait; }
     form.card label { grid-template-columns: 1fr; gap: 2px; }
     form.card .control { flex-wrap: wrap; }
 }
+
+table.equipment { border-collapse: collapse; width: 100%; margin-top: 6px; }
+table.equipment th { color: var(--muted); font-weight: 500; text-align: left; padding: 2px 4px; }
+table.equipment td { padding: 2px 4px; }
+table.equipment input { width: 100%; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+table.equipment input.num { max-width: 110px; }
+table.equipment button.remove-row { padding: 4px 8px; }
+@media (max-width: 640px) {
+    table.equipment thead { display: none; }
+    table.equipment tr { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+    table.equipment input.num { max-width: none; }
+}

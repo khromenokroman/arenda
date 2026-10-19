@@ -8,7 +8,7 @@
 namespace {
 
 /// Миграции схемы. Применённую миграцию не менять: изменения только новой миграцией в конце.
-constexpr std::array<std::string_view, 4> MIGRATIONS = {
+constexpr std::array<std::string_view, 5> MIGRATIONS = {
     // 1: настройки ключ - значение
     R"sql(
 CREATE TABLE settings (
@@ -80,6 +80,26 @@ ALTER TABLE landlords ADD COLUMN days_off       TEXT NOT NULL DEFAULT '1 и 2 я
 ALTER TABLE landlords ADD COLUMN fire_fine      TEXT NOT NULL DEFAULT '5 000';
 ALTER TABLE landlords ADD COLUMN contract_limit TEXT NOT NULL DEFAULT '100 000';
 ALTER TABLE landlords ADD COLUMN lease_months   TEXT NOT NULL DEFAULT '11';
+)sql",
+    // 5: арендуемое место и оборудование арендатора (приложение 2 договора)
+    R"sql(
+ALTER TABLE tenants ADD COLUMN area               TEXT NOT NULL DEFAULT '';
+ALTER TABLE tenants ADD COLUMN trade_area         TEXT NOT NULL DEFAULT '';
+ALTER TABLE tenants ADD COLUMN floor              TEXT NOT NULL DEFAULT '';
+ALTER TABLE tenants ADD COLUMN purpose            TEXT NOT NULL DEFAULT '';
+ALTER TABLE tenants ADD COLUMN activity_gen       TEXT NOT NULL DEFAULT '';
+ALTER TABLE tenants ADD COLUMN premises_condition TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE tenant_equipment (
+    id        INTEGER PRIMARY KEY,
+    tenant_id INTEGER NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+    pos       INTEGER NOT NULL,
+    name      TEXT    NOT NULL,
+    model     TEXT    NOT NULL DEFAULT '',
+    power_c   INTEGER NOT NULL CHECK (power_c >= 0),
+    qty       INTEGER NOT NULL CHECK (qty > 0),
+    UNIQUE (tenant_id, pos)
+);
 )sql",
 };
 

@@ -4,6 +4,7 @@
 
 #include "dadata.hpp"
 #include "db.hpp"
+#include "equipment.hpp"
 #include "landlords.hpp"
 #include "tenants.hpp"
 
@@ -47,5 +48,6 @@ class Api {
     DaData m_dadata;
     Landlords m_landlords;
     Tenants m_tenants;
+    Equipment m_equipment;
     Database &m_db;
 };

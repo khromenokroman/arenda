@@ -220,9 +220,38 @@ async function renderTenants(page) {
         </table>`}`;
 }
 
+/** Строка таблицы оборудования; поля без name, чтобы не попасть в данные карточки. */
+function equipmentRow(row) {
+    return `<tr>
+        <td><input data-col="name" value="${esc(row.name || '')}" placeholder="Станок для изготовления ключей"></td>
+        <td><input data-col="model" value="${esc(row.model || '')}" placeholder="марка, модель"></td>
+        <td><input data-col="power" value="${esc(row.power || '')}" placeholder="0,5" class="num"></td>
+        <td><input data-col="qty" type="number" min="1" value="${esc(row.qty || 1)}" class="num"></td>
+        <td><button type="button" class="remove-row" title="Удалить строку">✕</button></td>
+    </tr>`;
+}
+
+/** Строки оборудования из таблицы; полностью пустые пропускаются. */
+function equipmentRows(table) {
+    return [...table.querySelectorAll('tbody tr')]
+        .map(tr => Object.fromEntries([...tr.querySelectorAll('[data-col]')].map(i => [i.dataset.col, i.value.trim()])))
+        .filter(r => r.name || r.model || r.power)
+        .map(r => ({name: r.name, model: r.model, power: r.power, qty: Number(r.qty) || 0}));
+}
+
+/** Суммарная мощность в кВт для подписи под таблицей; нечисловые значения не считаются. */
+function totalPower(rows) {
+    const sum = rows.reduce((acc, r) => acc + (Number(String(r.power).replace(/\s/g, '').replace(',', '.')) || 0) * r.qty, 0);
+    return sum.toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
 async function renderTenant(page, idText) {
     const isNew = idText === 'new';
-    const [kinds, tenant] = await Promise.all([tenantKindList(), isNew ? Promise.resolve({kind: 'ip'}) : api('GET', `/api/tenants/${idText}`)]);
+    const [kinds, tenant, equipment] = await Promise.all([
+        tenantKindList(),
+        isNew ? Promise.resolve({kind: 'ip'}) : api('GET', `/api/tenants/${idText}`),
+        isNew ? Promise.resolve([]) : api('GET', `/api/tenants/${idText}/equipment`),
+    ]);
     const kindOptions = kinds
         .map(k => `<option value="${esc(k.code)}"${k.code === tenant.kind ? ' selected' : ''}>${esc(k.label)}</option>`)
         .join('');
@@ -233,6 +262,14 @@ async function renderTenant(page, idText) {
                 <label><span>Вид *</span><select name="kind">${kindOptions}</select></label>
             </fieldset>
             <div id="kind-fields"></div>
+            <fieldset><legend>Оборудование (приложение 2)</legend>
+                <table class="equipment">
+                    <thead><tr><th>Наименование</th><th>Марка, модель</th><th>Мощность, кВт</th><th>Кол-во</th><th></th></tr></thead>
+                    <tbody>${equipment.map(equipmentRow).join('')}</tbody>
+                </table>
+                <p><button type="button" id="add-row">+ строка</button>
+                    <span class="muted" id="total-power"></span></p>
+            </fieldset>
             <div class="actions">
                 <button type="submit">Сохранить</button>
                 ${isNew ? '' : '<button type="button" class="danger" id="remove">Удалить</button>'}
@@ -253,11 +290,37 @@ async function renderTenant(page, idText) {
     });
     drawFields();
     bindLookup(form);
+    const table = form.querySelector('table.equipment');
+    const showPower = () => {
+        const rows = equipmentRows(table);
+        form.querySelector('#total-power').textContent = rows.length === 0 ? 'не используется' : `суммарная мощность ${totalPower(rows)} кВт`;
+    };
+    form.querySelector('#add-row').addEventListener('click', () => {
+        table.querySelector('tbody').insertAdjacentHTML('beforeend', equipmentRow({}));
+        table.querySelector('tbody tr:last-child input').focus();
+    });
+    table.addEventListener('click', event => {
+        if (event.target.closest('.remove-row')) {
+            event.target.closest('tr').remove();
+            showPower();
+        }
+    });
+    table.addEventListener('input', showPower);
+    showPower();
     form.addEventListener('submit', async event => {
         event.preventDefault();
         const body = Object.fromEntries(new FormData(form));
         try {
             const saved = await api(isNew ? 'POST' : 'PUT', isNew ? '/api/tenants' : `/api/tenants/${idText}`, body);
+            try {
+                await api('PUT', `/api/tenants/${saved.id}/equipment`, equipmentRows(table));
+            } catch (e) {
+                // карточка уже сохранена: открываем её, чтобы исправить оборудование
+                if (isNew) {
+                    location.hash = `#/tenants/${saved.id}`;
+                }
+                throw new Error(`Карточка сохранена, оборудование нет: ${e.message}`);
+            }
             showMessage(`Сохранено: ${saved.title}`, false);
             form.querySelectorAll('.filled').forEach(i => i.classList.remove('filled'));
             if (isNew) {

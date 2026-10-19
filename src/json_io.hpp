@@ -2,8 +2,10 @@
 #include <nlohmann/json.hpp>
 #include <span>
 #include <string>
+#include <vector>
 
 #include "card_store.hpp"
+#include "equipment.hpp"
 #include "fields.hpp"
 
 /**
@@ -23,3 +25,12 @@
 
 /// {"id": N, поля...}.
 [[nodiscard]] nlohmann::json to_json(Card const &card);
+
+/// Строка оборудования: {"name", "model", "power": "1,50", "qty": 2}; мощность строкой в кВт.
+[[nodiscard]] nlohmann::json to_json(EquipmentRow const &row);
+
+/**
+ * @brief Перечень оборудования из [{"name", "model", "power": "1,5", "qty": 2}, ...].
+ * @throws UserError не массив, неверные типы или мощность
+ */
+[[nodiscard]] std::vector<EquipmentRow> equipment_from_json(nlohmann::json const &j);

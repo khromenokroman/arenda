@@ -207,7 +207,7 @@ TEST(Api, TenantsCrud) {
     EXPECT_EQ(gender.at("input"), "select");
     EXPECT_EQ(gender.at("choices").size(), 2U);
 
-    res = cli.Post("/api/tenants", R"({"kind": "ip", "name": "Петров Пётр Петрович", "gender": "m"})", JSON);
+    res = cli.Post("/api/tenants", R"({"kind": "ip", "name": "Петров Пётр Петрович", "gender": "m", "inn": "500100732259"})", JSON);
     ASSERT_TRUE(res);
     ASSERT_EQ(res->status, 201) << res->body;
     auto const created = nlohmann::json::parse(res->body);
@@ -291,4 +291,42 @@ TEST(Api, Lookup) {
     res = bad_key.client().Get("/api/lookup/bank?bik=044525225");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 502) << res->body;
+}
+
+/**
+ * @brief Оборудование арендатора через HTTP: замена перечня, мощность строкой в ответе, ошибки.
+ */
+TEST(Api, TenantEquipment) {
+    TestServer srv;
+    auto cli = srv.client();
+    constexpr char const JSON[] = "application/json";
+    auto res = cli.Post("/api/tenants", R"({"kind": "ip", "name": "Петров Пётр Петрович", "gender": "m", "inn": "500100732259"})", JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 201) << res->body;
+    auto const path = "/api/tenants/" + std::to_string(nlohmann::json::parse(res->body).at("id").get<std::int64_t>()) + "/equipment";
+
+    res = cli.Put(path, R"([{"name": "Станок", "model": "Silca", "power": "0,55", "qty": 1}, {"name": "Точило", "power": "0.25", "qty": 2}])", JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    auto const rows = nlohmann::json::parse(res->body);
+    ASSERT_EQ(rows.size(), 2U) << res->body;
+    EXPECT_EQ(rows[0].at("power"), "0,55");
+    EXPECT_EQ(rows[1].at("model"), "") << res->body;
+
+    res = cli.Get(path);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(nlohmann::json::parse(res->body).size(), 2U) << res->body;
+
+    res = cli.Put(path, R"([{"name": "Станок", "power": "мощный"}])", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << res->body;
+    EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr("строка 1: мощность, кВт: нужно число"));
+
+    res = cli.Put(path, R"({"name": "Станок"})", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << res->body;
+
+    res = cli.Get("/api/tenants/999/equipment");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404) << res->body;
 }
