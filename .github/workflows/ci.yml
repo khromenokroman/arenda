@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: clang-format и clang-tidy
+    runs-on: ubuntu-24.04
+    container: debian:bookworm
+
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git build-essential cmake clang-format-16 clang-tidy-16 \
+            libsqlite3-dev nlohmann-json3-dev libgtest-dev libgmock-dev
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: clang-format
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git ls-files '*.cpp' '*.hpp' | xargs clang-format-16 --style=file --dry-run -Werror
+
+      - name: clang-tidy
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+          git ls-files 'src/*.cpp' 'tests/*.cpp' | xargs -P "$(nproc)" -n 1 clang-tidy-16 -p build --quiet
+
+  build:
+    name: build-${{ matrix.distro }}
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: debian12
+            image: debian:bookworm
+          - distro: debian13
+            image: debian:trixie
+
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git build-essential cmake curl \
+            libsqlite3-dev nlohmann-json3-dev libgtest-dev libgmock-dev
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Check tag matches version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=$(sed -n 's/^ *VERSION \([0-9.]*\)$/\1/p' CMakeLists.txt | head -1)
+          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "Тег ${GITHUB_REF_NAME} не совпадает с версией v${VERSION} в CMakeLists.txt"
+            exit 1
+          fi
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+
+      - name: Build
+        run: cmake --build build -j "$(nproc)"
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Smoke run
+        run: |
+          ./build/arenda --version
+          ./build/arenda --db /tmp/smoke.db --web web --port 18080 &
+          pid=$!
+          for i in $(seq 50); do curl -sf http://127.0.0.1:18080/api/version && break; sleep 0.1; done
+          curl -sf http://127.0.0.1:18080/ | grep -q "<title>"
+          kill "$pid"
+          wait "$pid"
