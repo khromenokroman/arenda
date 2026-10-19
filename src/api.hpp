@@ -2,6 +2,7 @@
 #include <functional>
 #include <string>
 
+#include "contracts.hpp"
 #include "dadata.hpp"
 #include "db.hpp"
 #include "equipment.hpp"
@@ -43,11 +44,13 @@ class Api {
     void register_landlords(httplib::Server &server);
     void register_tenants(httplib::Server &server);
     void register_lookup(httplib::Server &server);
+    void register_contracts(httplib::Server &server);
 
     std::string m_web_dir;
     DaData m_dadata;
     Landlords m_landlords;
     Tenants m_tenants;
     Equipment m_equipment;
+    Contracts m_contracts;
     Database &m_db;
 };

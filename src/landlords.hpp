@@ -34,7 +34,7 @@ class Landlords {
      * @throws UserError, NotFoundError
      */
     void update(std::int64_t id, Fields const &changes);
-    /// @throws NotFoundError
+    /// @throws NotFoundError; UserError если у арендодателя есть договоры
     void remove(std::int64_t id);
 
    private:

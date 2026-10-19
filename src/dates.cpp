@@ -21,6 +21,21 @@ int number(std::string const &text, std::size_t pos, std::size_t count) {
 
 } // namespace
 
+namespace {
+
+std::chrono::year_month_day parse_ymd(std::string const &date) {
+    check_date(date);
+    return std::chrono::year_month_day{std::chrono::year{number(date, 0, 4)}, std::chrono::month{static_cast<unsigned>(number(date, 5, 2))},
+                                       std::chrono::day{static_cast<unsigned>(number(date, 8, 2))}};
+}
+
+std::string format_ymd(std::chrono::year_month_day const &ymd) {
+    auto const two = [](unsigned v) { return std::string(v < 10 ? "0" : "") + std::to_string(v); };
+    return std::to_string(static_cast<int>(ymd.year())) + "-" + two(static_cast<unsigned>(ymd.month())) + "-" + two(static_cast<unsigned>(ymd.day()));
+}
+
+} // namespace
+
 void check_date(std::string const &date) {
     constexpr std::size_t SIZE = 10;
     if (date.size() != SIZE || date[4] != '-' || date[7] != '-') {
@@ -37,4 +52,16 @@ void check_date(std::string const &date) {
     if (!ymd.ok() || year < 1900) {
         throw UserError("нет такой даты: «" + date + "»");
     }
+}
+
+std::string add_months(std::string const &date, int months) {
+    auto ymd = parse_ymd(date) + std::chrono::months{months};
+    if (!ymd.ok()) {
+        ymd = std::chrono::year_month_day_last{ymd.year(), std::chrono::month_day_last{ymd.month()}};
+    }
+    return format_ymd(ymd);
+}
+
+std::string add_days(std::string const &date, int days) {
+    return format_ymd(std::chrono::year_month_day{std::chrono::sys_days{parse_ymd(date)} + std::chrono::days{days}});
 }

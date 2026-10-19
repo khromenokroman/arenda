@@ -29,6 +29,7 @@ set(ARENDA_WEB_DIR "${CMAKE_INSTALL_FULL_DATADIR}/${PROJECT_NAME}/web")
 add_library(${PROJECT_NAME}-core STATIC
         src/api.cpp
         src/card_store.cpp
+        src/contracts.cpp
         src/dadata.cpp
         src/dates.cpp
         src/db.cpp
@@ -36,6 +37,7 @@ add_library(${PROJECT_NAME}-core STATIC
         src/fields.cpp
         src/json_io.cpp
         src/landlords.cpp
+        src/lease_split.cpp
         src/names.cpp
         src/numbers.cpp
         src/options.cpp
@@ -62,11 +64,13 @@ if (BUILD_TESTS)
     find_package(GTest REQUIRED)
     add_executable(${PROJECT_NAME}-tests
             tests/api_test.cpp
+            tests/contracts_test.cpp
             tests/dadata_test.cpp
             tests/dates_test.cpp
             tests/db_test.cpp
             tests/equipment_test.cpp
             tests/landlords_test.cpp
+            tests/lease_split_test.cpp
             tests/names_test.cpp
             tests/numbers_test.cpp
             tests/options_test.cpp

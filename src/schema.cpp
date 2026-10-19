@@ -8,7 +8,7 @@
 namespace {
 
 /// Миграции схемы. Применённую миграцию не менять: изменения только новой миграцией в конце.
-constexpr std::array<std::string_view, 5> MIGRATIONS = {
+constexpr std::array<std::string_view, 6> MIGRATIONS = {
     // 1: настройки ключ - значение
     R"sql(
 CREATE TABLE settings (
@@ -100,6 +100,25 @@ CREATE TABLE tenant_equipment (
     qty       INTEGER NOT NULL CHECK (qty > 0),
     UNIQUE (tenant_id, pos)
 );
+)sql",
+    // 6: договоры; карточки сторон и оборудование копируются в JSON на момент создания
+    R"sql(
+CREATE TABLE contracts (
+    id             INTEGER PRIMARY KEY,
+    number         TEXT    NOT NULL UNIQUE,
+    landlord_id    INTEGER NOT NULL REFERENCES landlords (id),
+    tenant_id      INTEGER NOT NULL REFERENCES tenants (id),
+    date_start     TEXT    NOT NULL,
+    date_end       TEXT    NOT NULL,
+    months         INTEGER NOT NULL CHECK (months > 0),
+    rent_kop       INTEGER NOT NULL CHECK (rent_kop > 0),
+    landlord_json  TEXT    NOT NULL,
+    tenant_json    TEXT    NOT NULL,
+    equipment_json TEXT    NOT NULL,
+    created_at     TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX contracts_tenant ON contracts (tenant_id);
+CREATE INDEX contracts_landlord ON contracts (landlord_id);
 )sql",
 };
 

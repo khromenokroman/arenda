@@ -88,3 +88,19 @@ table.equipment button.remove-row { padding: 4px 8px; }
     table.equipment tr { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 6px 0; border-bottom: 1px solid var(--line); }
     table.equipment input.num { max-width: none; }
 }
+
+h3 { margin: 16px 0 8px; font-size: 16px; }
+.num { text-align: right; white-space: nowrap; }
+table.list td.num, table.list th.num { text-align: right; }
+input.filter { margin-left: 12px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; min-width: 260px; }
+table.info { border-collapse: collapse; margin-bottom: 8px; }
+table.info th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 16px 4px 0; vertical-align: top; }
+table.info td { padding: 4px 0; }
+table.requests select { width: 100%; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+div.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 640px) {
+    input.filter { margin: 8px 0 0; min-width: 0; width: 100%; }
+    table.list.contracts thead { display: none; }
+    table.list.contracts tr { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); }
+    table.list.contracts td { border: none; }
+}

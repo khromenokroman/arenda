@@ -28,12 +28,16 @@ function showMessage(text, isError = true) {
 
 /** Разделы меню: адрес после #/ и заголовок. */
 const MENU = [
+    {path: 'contracts', title: 'Договоры'},
     {path: 'landlords', title: 'Арендодатели'},
     {path: 'tenants', title: 'Арендаторы'},
 ];
 
 /** Страницы: шаблон адреса и функция отрисовки, параметры из адреса передаются по порядку. */
 const ROUTES = [
+    {re: /^contracts$/, render: renderContracts},
+    {re: /^contracts\/new$/, render: renderContractsNew},
+    {re: /^contracts\/(\d+)$/, render: renderContract},
     {re: /^landlords$/, render: renderLandlords},
     {re: /^landlords\/(new|\d+)$/, render: renderLandlord},
     {re: /^tenants$/, render: renderTenants},
@@ -347,6 +351,194 @@ async function renderTenant(page, idText) {
             }
         });
     }
+}
+
+/** ГГГГ-ММ-ДД в ДД.ММ.ГГГГ. */
+function ruDate(iso) {
+    const [y, m, d] = String(iso).split('-');
+    return d ? `${d}.${m}.${y}` : iso;
+}
+
+/** Таблица договоров (список и расчёт): номер ссылкой, если договор уже создан. */
+function contractsTable(list) {
+    const rows = list.map(c => `<tr>
+            <td>${c.id ? `<a href="#/contracts/${c.id}">${esc(c.number)}</a>` : esc(c.number)}</td>
+            <td>${esc(c.tenant_title)}</td>
+            <td>${ruDate(c.start)} – ${ruDate(c.end)}</td>
+            <td class="num">${c.months}</td>
+            <td class="num">${esc(c.rent)}</td>
+            <td class="num">${esc(c.total)}</td>
+        </tr>`).join('');
+    return `<table class="list contracts">
+        <thead><tr><th>Номер</th><th>Арендатор</th><th>Срок</th><th class="num">Мес.</th><th class="num">Плата в месяц</th><th class="num">За срок</th></tr></thead>
+        <tbody>${rows}</tbody>
+    </table>`;
+}
+
+async function renderContracts(page) {
+    const list = await api('GET', '/api/contracts');
+    page.innerHTML = `<h2>Договоры</h2>
+        <p><a class="button" href="#/contracts/new">+ создать договоры</a>
+            ${list.length === 0 ? '' : '<input id="filter" placeholder="поиск по номеру или арендатору" class="filter">'}</p>
+        ${list.length === 0 ? '<p class="muted">Договоров пока нет.</p>' : contractsTable(list)}`;
+    const filter = page.querySelector('#filter');
+    if (filter) {
+        filter.addEventListener('input', () => {
+            const text = filter.value.trim().toLowerCase();
+            page.querySelectorAll('table.contracts tbody tr').forEach(tr => {
+                tr.hidden = text !== '' && !tr.textContent.toLowerCase().includes(text);
+            });
+        });
+    }
+}
+
+/** Строка документа «Создание договоров». */
+function requestRow(tenants, row = {}) {
+    const options = tenants.map(t => `<option value="${t.id}"${t.id === row.tenant_id ? ' selected' : ''}>${esc(t.title)}</option>`).join('');
+    return `<tr>
+        <td><select data-col="tenant_id"><option value="">выберите арендатора</option>${options}</select></td>
+        <td><input data-col="start" type="date" value="${esc(row.start || '')}"></td>
+        <td><input data-col="rent" value="${esc(row.rent || '')}" placeholder="20 000" class="num"></td>
+        <td><button type="button" class="remove-row" title="Удалить строку">✕</button></td>
+    </tr>`;
+}
+
+async function renderContractsNew(page) {
+    const [landlords, tenants] = await Promise.all([api('GET', '/api/landlords'), api('GET', '/api/tenants')]);
+    if (landlords.length === 0 || tenants.length === 0) {
+        page.innerHTML = `<h2>Создание договоров</h2>
+            <p>Сначала заведите ${landlords.length === 0 ? '<a href="#/landlords/new">арендодателя</a>' : ''}
+            ${landlords.length === 0 && tenants.length === 0 ? 'и' : ''}
+            ${tenants.length === 0 ? '<a href="#/tenants/new">арендатора</a>' : ''}.</p>`;
+        return;
+    }
+    const today = new Date();
+    const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    page.innerHTML = `<h2>Создание договоров</h2>
+        <p><a href="#/contracts">← Договоры</a></p>
+        <form class="card">
+            <fieldset><legend>Арендодатель</legend>
+                <label><span>Арендодатель *</span><select name="landlord_id">
+                    ${landlords.map(l => `<option value="${l.id}">${esc(l.name_short)}</option>`).join('')}</select></label>
+                <p class="muted" id="terms"></p>
+            </fieldset>
+            <fieldset><legend>Арендаторы</legend>
+                <table class="equipment requests">
+                    <thead><tr><th>Арендатор</th><th>Дата начала</th><th>Плата в месяц, руб.</th><th></th></tr></thead>
+                    <tbody>${requestRow(tenants, {start: iso})}</tbody>
+                </table>
+                <p><button type="button" id="add-row">+ строка</button></p>
+            </fieldset>
+            <div class="actions">
+                <button type="button" id="plan">Рассчитать</button>
+                <button type="submit">Создать договоры</button>
+            </div>
+        </form>
+        <div id="plan-result"></div>`;
+    const form = page.querySelector('form');
+    const table = form.querySelector('table.requests');
+    const landlordSelect = form.querySelector('[name=landlord_id]');
+    const showTerms = () => {
+        const l = landlords.find(x => String(x.id) === landlordSelect.value);
+        form.querySelector('#terms').textContent =
+            `Срок аренды ${l.lease_months} мес. делится на договоры не больше ${l.contract_limit} руб. каждый (условия в карточке арендодателя).`;
+    };
+    landlordSelect.addEventListener('change', showTerms);
+    showTerms();
+    const body = () => ({
+        landlord_id: Number(landlordSelect.value),
+        rows: [...table.querySelectorAll('tbody tr')].map(tr => {
+            const get = col => tr.querySelector(`[data-col=${col}]`).value;
+            return {tenant_id: get('tenant_id') === '' ? null : Number(get('tenant_id')), start: get('start'), rent: get('rent')};
+        }),
+    });
+    form.querySelector('#add-row').addEventListener('click', () => {
+        const last = [...table.querySelectorAll('tbody tr [data-col=start]')].pop();
+        table.querySelector('tbody').insertAdjacentHTML('beforeend', requestRow(tenants, {start: last ? last.value : iso}));
+    });
+    table.addEventListener('click', event => {
+        if (event.target.closest('.remove-row')) {
+            event.target.closest('tr').remove();
+        }
+    });
+    const result = page.querySelector('#plan-result');
+    form.querySelector('#plan').addEventListener('click', async () => {
+        try {
+            const plan = await api('POST', '/api/contracts/plan', body());
+            showMessage('');
+            result.innerHTML = `<h3>Будут созданы договоры: ${plan.length}</h3>${contractsTable(plan)}`;
+        } catch (e) {
+            result.innerHTML = '';
+            showMessage(e.message);
+        }
+    });
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        try {
+            const created = await api('POST', '/api/contracts', body());
+            showMessage(`Создано договоров: ${created.length}`, false);
+            location.hash = '#/contracts';
+        } catch (e) {
+            showMessage(e.message);
+        }
+    });
+}
+
+/** Пара «подпись: значение» для карточки договора; пустое значение - прочерк. */
+function infoRow(label, value) {
+    return `<tr><th>${esc(label)}</th><td>${value ? esc(value) : '<span class="muted">не заполнено</span>'}</td></tr>`;
+}
+
+async function renderContract(page, idText) {
+    const c = await api('GET', `/api/contracts/${idText}`);
+    const t = c.tenant;
+    const equipment = c.equipment.length === 0 ? '<p class="muted">Оборудование не используется.</p>' : `<table class="list">
+        <thead><tr><th>Наименование</th><th>Марка, модель</th><th class="num">Мощность, кВт</th><th class="num">Кол-во</th></tr></thead>
+        <tbody>${c.equipment.map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.model)}</td><td class="num">${esc(r.power)}</td><td class="num">${r.qty}</td></tr>`).join('')}</tbody>
+        </table><p>Суммарная мощность: ${esc(c.total_power)} кВт</p>`;
+    page.innerHTML = `<h2>Договор ${esc(c.number)}</h2>
+        <p><a href="#/contracts">← Договоры</a></p>
+        <table class="info">
+            ${infoRow('Срок', `${ruDate(c.start)} – ${ruDate(c.end)} (${c.months} мес.)`)}
+            ${infoRow('Плата в месяц, руб.', c.rent)}
+            ${infoRow('За срок, руб.', c.total)}
+            ${infoRow('Арендодатель', c.landlord_title)}
+            ${infoRow('Арендатор', `${c.tenant_title} (${c.kind_label}), ИНН ${t.inn}`)}
+            ${infoRow('Площадь по плитке, кв. м', t.area)}
+            ${infoRow('Площадь для торговли, кв. м', t.trade_area)}
+            ${infoRow('Этаж', t.floor)}
+            ${infoRow('Назначение', t.purpose)}
+            ${infoRow('Вид деятельности', t.activity_gen)}
+            ${infoRow('Состояние помещения', t.premises_condition)}
+        </table>
+        <h3>Оборудование (приложение 2)</h3>
+        ${equipment}
+        <p class="muted">Данные сторон скопированы в договор при создании. Если карточки исправлены, нажмите «Обновить из карточек».</p>
+        <div class="actions">
+            <button type="button" id="refresh">Обновить из карточек</button>
+            <button type="button" class="danger" id="remove">Удалить</button>
+        </div>`;
+    page.querySelector('#refresh').addEventListener('click', async () => {
+        try {
+            await api('POST', `/api/contracts/${idText}/refresh`);
+            await renderContract(page, idText);
+            showMessage('Данные сторон обновлены из карточек', false);
+        } catch (e) {
+            showMessage(e.message);
+        }
+    });
+    page.querySelector('#remove').addEventListener('click', async () => {
+        if (!confirm(`Удалить договор ${c.number}?`)) {
+            return;
+        }
+        try {
+            await api('DELETE', `/api/contracts/${idText}`);
+            showMessage(`Удалён договор ${c.number}`, false);
+            location.hash = '#/contracts';
+        } catch (e) {
+            showMessage(e.message);
+        }
+    });
 }
 
 async function render() {

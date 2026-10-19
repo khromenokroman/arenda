@@ -2,9 +2,11 @@
 #include <nlohmann/json.hpp>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "card_store.hpp"
+#include "contracts.hpp"
 #include "equipment.hpp"
 #include "fields.hpp"
 
@@ -34,3 +36,14 @@
  * @throws UserError не массив, неверные типы или мощность
  */
 [[nodiscard]] std::vector<EquipmentRow> equipment_from_json(nlohmann::json const &j);
+
+/**
+ * @brief Договор: номер, сроки, плата («20 000,00»), итог за срок, названия сторон, копии карточек и оборудования.
+ */
+[[nodiscard]] nlohmann::json to_json(Contract const &contract);
+
+/**
+ * @brief Тело «Создания договоров»: {"landlord_id": N, "rows": [{"tenant_id": N, "start": "ГГГГ-ММ-ДД", "rent": "20 000"}]}.
+ * @throws UserError неверная структура или типы
+ */
+[[nodiscard]] std::pair<std::int64_t, std::vector<ContractRequest>> contract_requests_from_json(nlohmann::json const &j);

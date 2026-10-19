@@ -68,7 +68,7 @@ nlohmann::json tenant_json(Tenant const &tenant) {
 } // namespace
 
 Api::Api(Database &db, std::string web_dir, DaData dadata)
-    : m_web_dir{std::move(web_dir)}, m_dadata{std::move(dadata)}, m_landlords{db}, m_tenants{db}, m_equipment{db}, m_db{db} {}
+    : m_web_dir{std::move(web_dir)}, m_dadata{std::move(dadata)}, m_landlords{db}, m_tenants{db}, m_equipment{db}, m_contracts{db}, m_db{db} {}
 
 Api::Handler Api::guarded(Handler handler, bool lock_db) {
     return [this, lock_db, handler = std::move(handler)](httplib::Request const &req, httplib::Response &res) {
@@ -96,6 +96,7 @@ void Api::register_routes(httplib::Server &server) {
     register_landlords(server);
     register_tenants(server);
     register_lookup(server);
+    register_contracts(server);
 
     if (!m_web_dir.empty() && !server.set_mount_point("/", m_web_dir)) {
         throw std::runtime_error("каталог веб-интерфейса не найден: " + m_web_dir);
@@ -232,4 +233,46 @@ void Api::register_lookup(httplib::Server &server) {
                                            send_json(res, {{"fields", bank_fields(data)}});
                                        },
                                        false));
+}
+
+void Api::register_contracts(httplib::Server &server) {
+    auto const contracts_json = [](std::vector<Contract> const &list) {
+        auto out = nlohmann::json::array();
+        for (auto const &c : list) {
+            out.push_back(to_json(c));
+        }
+        return out;
+    };
+
+    server.Post("/api/contracts/plan", guarded([this, contracts_json](httplib::Request const &req, httplib::Response &res) {
+                    auto const [landlord_id, rows] = contract_requests_from_json(parse_object(req.body));
+                    send_json(res, contracts_json(m_contracts.plan(landlord_id, rows)));
+                }));
+
+    server.Post("/api/contracts", guarded([this, contracts_json](httplib::Request const &req, httplib::Response &res) {
+                    auto const [landlord_id, rows] = contract_requests_from_json(parse_object(req.body));
+                    std::vector<Contract> created;
+                    for (auto const id : m_contracts.create(landlord_id, rows)) {
+                        created.push_back(m_contracts.get(id));
+                    }
+                    send_json(res, contracts_json(created), HTTP_CREATED);
+                }));
+
+    server.Get("/api/contracts", guarded([this, contracts_json](httplib::Request const &, httplib::Response &res) {
+                   send_json(res, contracts_json(m_contracts.list()));
+               }));
+
+    server.Get("/api/contracts/:id",
+               guarded([this](httplib::Request const &req, httplib::Response &res) { send_json(res, to_json(m_contracts.get(path_id(req)))); }));
+
+    server.Post("/api/contracts/:id/refresh", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                    auto const id = path_id(req);
+                    m_contracts.refresh(id);
+                    send_json(res, to_json(m_contracts.get(id)));
+                }));
+
+    server.Delete("/api/contracts/:id", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                      m_contracts.remove(path_id(req));
+                      res.status = HTTP_NO_CONTENT;
+                  }));
 }

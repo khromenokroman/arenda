@@ -33,12 +33,15 @@ id() { sed -n 's/.*"id":\([0-9]*\).*/\1/p'; }
 
 EMPTY_LIST=$(dump_page landlords)
 EMPTY_TENANTS=$(dump_page tenants)
+EMPTY_CONTRACTS=$(dump_page contracts)
+EMPTY_NEW=$(dump_page contracts/new)
 LANDLORD=$(call POST landlords '{"name_full":"Общество с ограниченной ответственностью «Ромашка»","name_short":"ООО «Ромашка» <b>","inn":"7707083893"}' | id)
 
 IP=$(call POST tenants '{"kind":"ip","name":"Петров Пётр <b>","gender":"m","inn":"500100732259"}' | id)
 ORG=$(call POST tenants '{"kind":"org","name_full":"ООО «Берёза»","name_short":"ООО «Берёза» <b>","inn":"7707083893"}' | id)
 PERSON=$(call POST tenants '{"kind":"person","name":"Сидорова Анна <b>","gender":"f","birth_date":"1990-05-17","inn":"526317984689"}' | id)
 call PUT "tenants/$IP/equipment" '[{"name":"Станок <b>","model":"Silca","power":"0,55","qty":1}]' >/dev/null
+CONTRACT=$(call POST contracts "{\"landlord_id\":$LANDLORD,\"rows\":[{\"tenant_id\":$IP,\"start\":\"2026-10-19\",\"rent\":\"20 000\"},{\"tenant_id\":$ORG,\"start\":\"2026-11-01\",\"rent\":\"9000\"}]}" | id | head -1)
 
 PAGES=(
     ""
@@ -50,6 +53,9 @@ PAGES=(
     "tenants/$IP"
     "tenants/$ORG"
     "tenants/$PERSON"
+    "contracts"
+    "contracts/new"
+    "contracts/$CONTRACT"
 )
 
 failed=0
@@ -80,6 +86,12 @@ if grep -q 'Арендаторов пока нет' <<<"$EMPTY_TENANTS"; then
 else
     failed=1
     echo "FAIL  пустая база: нет надписи «Арендаторов пока нет»"
+fi
+if grep -q 'Договоров пока нет' <<<"$EMPTY_CONTRACTS" && grep -q 'Сначала заведите' <<<"$EMPTY_NEW"; then
+    echo "ok    пустая база: договоров нет, создание просит завести стороны"
+else
+    failed=1
+    echo "FAIL  пустая база: нет надписи «Договоров пока нет» или «Сначала заведите»"
 fi
 for page in "${PAGES[@]}"; do
     check "$page" "$(dump_page "$page")"

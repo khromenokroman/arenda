@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 
+#include "contracts.hpp"
 #include "dates.hpp"
 #include "errors.hpp"
 #include "numbers.hpp"
@@ -214,6 +215,10 @@ void Tenants::update(std::int64_t id, Fields const &changes) {
 
 void Tenants::remove(std::int64_t id) {
     Transaction tx{m_db};
+    auto const tenant = get(id);
+    if (auto const n = Contracts::count_for(m_db, "tenant_id", id); n != 0) {
+        throw UserError("у арендатора «" + title(tenant) + "» есть договоры (" + std::to_string(n) + "), удалить нельзя: сначала удалите договоры");
+    }
     m_store.remove(id);
     tx.commit();
 }

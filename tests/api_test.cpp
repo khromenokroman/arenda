@@ -330,3 +330,75 @@ TEST(Api, TenantEquipment) {
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 404) << res->body;
 }
+
+/**
+ * @brief Договоры через HTTP: расчёт без записи, создание, список, обновление из карточек, удаление, ошибки.
+ */
+TEST(Api, Contracts) {
+    TestServer srv;
+    auto cli = srv.client();
+    constexpr char const JSON[] = "application/json";
+    auto const id_of = [](httplib::Result const &res) { return nlohmann::json::parse(res->body).at("id").get<std::int64_t>(); };
+    auto res = cli.Post("/api/landlords", R"({"name_full": "ООО «Ромашка»", "name_short": "Ромашка"})", JSON);
+    ASSERT_TRUE(res);
+    auto const landlord = id_of(res);
+    res = cli.Post("/api/tenants", R"({"kind": "ip", "name": "Петров Пётр Петрович", "gender": "m", "inn": "500100732259"})", JSON);
+    ASSERT_TRUE(res);
+    auto const tenant = id_of(res);
+    auto const body =
+        nlohmann::json{{"landlord_id", landlord}, {"rows", {{{"tenant_id", tenant}, {"start", "2026-10-19"}, {"rent", "20 000"}}}}}.dump();
+
+    res = cli.Post("/api/contracts/plan", body, JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    auto const plan = nlohmann::json::parse(res->body);
+    ASSERT_EQ(plan.size(), 3U) << res->body;
+    EXPECT_EQ(plan[0].at("number"), "2026-10-19-500100732259");
+    EXPECT_EQ(plan[0].at("rent"), "20 000,00");
+    EXPECT_EQ(plan[0].at("total"), "80 000,00") << "4 месяца по 20 000";
+    EXPECT_EQ(plan[0].at("tenant_title"), "ИП Петров Пётр Петрович");
+
+    res = cli.Get("/api/contracts");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(nlohmann::json::parse(res->body).size(), 0U) << "расчёт не записывает";
+
+    res = cli.Post("/api/contracts", body, JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 201) << res->body;
+    auto const created = nlohmann::json::parse(res->body);
+    ASSERT_EQ(created.size(), 3U);
+    auto const first = "/api/contracts/" + std::to_string(created[0].at("id").get<std::int64_t>());
+
+    res = cli.Post("/api/contracts", body, JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << res->body;
+    EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr("уже есть"));
+
+    res = cli.Delete("/api/tenants/" + std::to_string(tenant));
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << "арендатора с договорами не удалить: " << res->body;
+
+    res = cli.Put("/api/tenants/" + std::to_string(tenant), R"({"floor": "3"})", JSON);
+    ASSERT_TRUE(res);
+    res = cli.Post(first + "/refresh", "", JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    EXPECT_EQ(nlohmann::json::parse(res->body).at("tenant").at("floor"), "3") << res->body;
+
+    res = cli.Delete(first);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 204);
+    res = cli.Get("/api/contracts");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(nlohmann::json::parse(res->body).size(), 2U) << res->body;
+
+    res = cli.Post("/api/contracts/plan", R"({"rows": []})", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+    EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr("выберите арендодателя"));
+    res = cli.Post("/api/contracts/plan",
+                   nlohmann::json{{"landlord_id", landlord}, {"rows", {{{"tenant_id", tenant}, {"start", "2026-10-19"}, {"rent", 5}}}}}.dump(), JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+    EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr("строка 1: укажите плату в месяц строкой"));
+}

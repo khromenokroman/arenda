@@ -2,6 +2,7 @@
 
 #include "errors.hpp"
 #include "numbers.hpp"
+#include "tenants.hpp"
 
 nlohmann::json parse_object(std::string const &body) {
     auto j = nlohmann::json::parse(body, nullptr, false);
@@ -93,4 +94,54 @@ std::vector<EquipmentRow> equipment_from_json(nlohmann::json const &j) {
         out.push_back(std::move(row));
     }
     return out;
+}
+
+nlohmann::json to_json(Contract const &contract) {
+    auto equipment = nlohmann::json::array();
+    for (auto const &row : contract.equipment) {
+        equipment.push_back(to_json(row));
+    }
+    Tenant const tenant{contract.tenant, contract.tenant_id};
+    return {{"id", contract.id},
+            {"number", contract.number},
+            {"landlord_id", contract.landlord_id},
+            {"tenant_id", contract.tenant_id},
+            {"start", contract.start},
+            {"end", contract.end},
+            {"months", contract.months},
+            {"rent", numbers::format_hundredths(contract.rent_kop)},
+            {"rent_kop", contract.rent_kop},
+            {"total", numbers::format_hundredths(contract.rent_kop * contract.months)},
+            {"landlord_title", contract.landlord.at("name_short")},
+            {"tenant_title", Tenants::title(tenant)},
+            {"kind_label", Tenants::kind(contract.tenant.at("kind")).label},
+            {"landlord", contract.landlord},
+            {"tenant", contract.tenant},
+            {"equipment", equipment},
+            {"total_power", numbers::format_hundredths(total_power(contract.equipment))}};
+}
+
+std::pair<std::int64_t, std::vector<ContractRequest>> contract_requests_from_json(nlohmann::json const &j) {
+    if (!j.contains("landlord_id") || !j["landlord_id"].is_number_integer()) {
+        throw UserError("выберите арендодателя (landlord_id)");
+    }
+    if (!j.contains("rows") || !j["rows"].is_array()) {
+        throw UserError("rows должно быть массивом строк");
+    }
+    std::vector<ContractRequest> rows;
+    for (std::size_t i = 0; i < j["rows"].size(); ++i) {
+        auto const &item = j["rows"][i];
+        auto const line = "строка " + std::to_string(i + 1) + ": ";
+        if (!item.is_object() || !item.contains("tenant_id") || !item["tenant_id"].is_number_integer()) {
+            throw UserError(line + "выберите арендатора");
+        }
+        if (!item.contains("start") || !item["start"].is_string()) {
+            throw UserError(line + "укажите дату начала");
+        }
+        if (!item.contains("rent") || !item["rent"].is_string()) {
+            throw UserError(line + "укажите плату в месяц строкой, например \"20 000\"");
+        }
+        rows.push_back({item["start"].get<std::string>(), item["rent"].get<std::string>(), item["tenant_id"].get<std::int64_t>()});
+    }
+    return {j["landlord_id"].get<std::int64_t>(), std::move(rows)};
 }
