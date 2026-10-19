@@ -91,7 +91,9 @@ Statement &Statement::bind(int index, std::int64_t value) {
 }
 
 Statement &Statement::bind(int index, std::string_view value) {
-    if (sqlite3_bind_text(m_stmt, index, value.data(), static_cast<int>(value.size()), SQLITE_TRANSIENT) != SQLITE_OK) {
+    // у пустого string_view бывает data() == nullptr, а такой указатель SQLite записывает как NULL
+    auto const *const text = value.data() != nullptr ? value.data() : "";
+    if (sqlite3_bind_text(m_stmt, index, text, static_cast<int>(value.size()), SQLITE_TRANSIENT) != SQLITE_OK) {
         fail(m_db, "ошибка привязки параметра");
     }
     return *this;

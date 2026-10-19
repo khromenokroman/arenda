@@ -69,3 +69,19 @@ TEST(Db, StatementCacheNested) {
         EXPECT_FALSE(again.step()) << "из кеша - без старого параметра (NULL): строк нет";
     }
 }
+
+/**
+ * @brief Пустой string_view без буфера (data() == nullptr) записывается пустой строкой, а не NULL.
+ */
+TEST(Db, BindEmptyStringViewIsNotNull) {
+    Database db{":memory:"};
+    db.exec("CREATE TABLE t (x TEXT NOT NULL)");
+    auto insert = db.prepare("INSERT INTO t VALUES (?)");
+    ASSERT_EQ(std::string_view{}.data(), nullptr) << "условие теста: пустой string_view без буфера";
+    insert.bind(1, std::string_view{});
+    EXPECT_NO_THROW(insert.step()) << "NOT NULL нарушен: пустая строка ушла как NULL";
+    auto select = db.prepare("SELECT x IS NULL, x FROM t");
+    ASSERT_TRUE(select.step());
+    EXPECT_EQ(select.column_int(0), 0) << "значение записано как NULL";
+    EXPECT_EQ(select.column_text(1), "");
+}
