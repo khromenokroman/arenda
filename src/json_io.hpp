@@ -18,7 +18,7 @@
  */
 [[nodiscard]] Fields fields_from_json(nlohmann::json const &j);
 
-/// Описание полей для веб-формы: [{"key", "label", "group", "hint", "required"}, ...].
+/// Описание полей для веб-формы: [{"key", "label", "group", "hint", "required", "input", "choices": [{"value", "label"}]}, ...].
 [[nodiscard]] nlohmann::json to_json(std::span<FieldSpec const> specs);
 
 /// {"id": N, поля...}.

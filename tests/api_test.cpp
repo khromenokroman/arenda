@@ -187,3 +187,51 @@ TEST(Api, LandlordsErrors) {
         EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr(c.reason));
     }
 }
+
+/**
+ * @brief Арендаторы через HTTP: виды с полями, создание, название и вид в ответе, смена вида, удаление.
+ */
+TEST(Api, TenantsCrud) {
+    TestServer srv;
+    auto cli = srv.client();
+    constexpr char const JSON[] = "application/json";
+
+    auto res = cli.Get("/api/tenants/kinds");
+    ASSERT_TRUE(res) << "нет ответа: " << httplib::to_string(res.error());
+    auto const kinds = nlohmann::json::parse(res->body);
+    ASSERT_EQ(kinds.size(), 3U) << res->body;
+    EXPECT_EQ(kinds[0].at("code"), "ip");
+    auto const &gender = kinds[0].at("fields")[1];
+    EXPECT_EQ(gender.at("key"), "gender") << res->body;
+    EXPECT_EQ(gender.at("input"), "select");
+    EXPECT_EQ(gender.at("choices").size(), 2U);
+
+    res = cli.Post("/api/tenants", R"({"kind": "ip", "name": "Петров Пётр Петрович", "gender": "m"})", JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 201) << res->body;
+    auto const created = nlohmann::json::parse(res->body);
+    auto const id = std::to_string(created.at("id").get<std::int64_t>());
+    EXPECT_EQ(created.at("title"), "ИП Петров Пётр Петрович") << res->body;
+    EXPECT_EQ(created.at("kind_label"), "Индивидуальный предприниматель") << res->body;
+
+    res = cli.Put("/api/tenants/" + id, R"({"kind": "person", "birth_date": "1980-01-31"})", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200) << res->body;
+    EXPECT_EQ(nlohmann::json::parse(res->body).at("title"), "Петров Пётр Петрович") << res->body;
+
+    res = cli.Put("/api/tenants/" + id, R"({"birth_date": "1980-02-30"})", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << res->body;
+    EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr("нет такой даты"));
+
+    res = cli.Get("/api/tenants");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(nlohmann::json::parse(res->body).size(), 1U) << res->body;
+
+    res = cli.Delete("/api/tenants/" + id);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 204) << res->body;
+    res = cli.Get("/api/tenants/" + id);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404) << res->body;
+}

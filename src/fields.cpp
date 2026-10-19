@@ -30,6 +30,10 @@ Fields clean_fields(std::span<FieldSpec const> specs, Fields const &values) {
         if (value.size() > spec.max_size) {
             throw UserError("поле «" + label + "» длиннее " + std::to_string(spec.max_size) + " байт");
         }
+        if (!value.empty() && !spec.choices.empty() &&
+            std::ranges::none_of(spec.choices, [&value](Choice const &choice) { return choice.value == value; })) {
+            throw UserError(std::string("поле «").append(label).append("»: недопустимое значение «").append(value).append("»"));
+        }
         if (!value.empty() && spec.check != nullptr) {
             spec.check(value);
         }
@@ -45,4 +49,16 @@ std::vector<std::string> keys(std::span<FieldSpec const> specs) {
         out.emplace_back(spec.key);
     }
     return out;
+}
+
+std::string_view to_string(Input input) {
+    switch (input) {
+        case Input::DATE:
+            return "date";
+        case Input::SELECT:
+            return "select";
+        case Input::TEXT:
+            break;
+    }
+    return "text";
 }

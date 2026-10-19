@@ -29,12 +29,15 @@ function showMessage(text, isError = true) {
 /** Разделы меню: адрес после #/ и заголовок. */
 const MENU = [
     {path: 'landlords', title: 'Арендодатели'},
+    {path: 'tenants', title: 'Арендаторы'},
 ];
 
 /** Страницы: шаблон адреса и функция отрисовки, параметры из адреса передаются по порядку. */
 const ROUTES = [
     {re: /^landlords$/, render: renderLandlords},
     {re: /^landlords\/(new|\d+)$/, render: renderLandlord},
+    {re: /^tenants$/, render: renderTenants},
+    {re: /^tenants\/(new|\d+)$/, render: renderTenant},
 ];
 
 let landlordSpecs = null;
@@ -61,6 +64,19 @@ async function renderLandlords(page) {
         </table>`}`;
 }
 
+/** Поле ввода по описанию: строка, дата или выбор из списка. */
+function fieldInput(spec, value) {
+    const name = `name="${esc(spec.key)}"`;
+    if (spec.input === 'select') {
+        const options = spec.choices
+            .map(c => `<option value="${esc(c.value)}"${c.value === value ? ' selected' : ''}>${esc(c.label)}</option>`)
+            .join('');
+        return `<select ${name}><option value="">не выбран</option>${options}</select>`;
+    }
+    const type = spec.input === 'date' ? 'date' : 'text';
+    return `<input type="${type}" ${name} value="${esc(value)}" placeholder="${esc(spec.hint)}">`;
+}
+
 /** Форма карточки по описанию полей: разделы fieldset, подсказка в пустом поле. */
 function fieldsForm(specs, values) {
     const groups = [];
@@ -74,7 +90,7 @@ function fieldsForm(specs, values) {
     }
     return groups.map(g => `<fieldset><legend>${esc(g.name)}</legend>
         ${g.specs.map(s => `<label><span>${esc(s.label)}${s.required ? ' *' : ''}</span>
-            <input name="${esc(s.key)}" value="${esc(values[s.key] || '')}" placeholder="${esc(s.hint)}"></label>`).join('')}
+            ${fieldInput(s, values[s.key] || '')}</label>`).join('')}
         </fieldset>`).join('');
 }
 
@@ -116,6 +132,95 @@ async function renderLandlord(page, idText) {
                 await api('DELETE', `/api/landlords/${idText}`);
                 showMessage(`Удалено: ${landlord.name_short}`, false);
                 location.hash = '#/landlords';
+            } catch (e) {
+                showMessage(e.message);
+            }
+        });
+    }
+}
+
+let tenantKinds = null;
+
+async function tenantKindList() {
+    if (!tenantKinds) {
+        tenantKinds = await api('GET', '/api/tenants/kinds');
+    }
+    return tenantKinds;
+}
+
+async function renderTenants(page) {
+    const list = await api('GET', '/api/tenants');
+    const rows = list.map(t => `<tr data-id="${t.id}">
+            <td><a href="#/tenants/${t.id}">${esc(t.title)}</a></td>
+            <td>${esc(t.kind_label)}</td>
+            <td>${esc(t.inn)}</td>
+            <td>${esc(t.phone)}</td>
+        </tr>`).join('');
+    page.innerHTML = `<h2>Арендаторы</h2>
+        <p><a class="button" href="#/tenants/new">+ арендатор</a></p>
+        ${list.length === 0 ? '<p class="muted">Арендаторов пока нет.</p>' : `<table class="list">
+            <thead><tr><th>Наименование</th><th>Вид</th><th>ИНН</th><th>Телефон</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`}`;
+}
+
+async function renderTenant(page, idText) {
+    const isNew = idText === 'new';
+    const [kinds, tenant] = await Promise.all([tenantKindList(), isNew ? Promise.resolve({kind: 'ip'}) : api('GET', `/api/tenants/${idText}`)]);
+    const kindOptions = kinds
+        .map(k => `<option value="${esc(k.code)}"${k.code === tenant.kind ? ' selected' : ''}>${esc(k.label)}</option>`)
+        .join('');
+    page.innerHTML = `<h2>${isNew ? 'Новый арендатор' : esc(tenant.title)}</h2>
+        <p><a href="#/tenants">← Арендаторы</a></p>
+        <form class="card">
+            <fieldset><legend>Вид арендатора</legend>
+                <label><span>Вид *</span><select name="kind">${kindOptions}</select></label>
+            </fieldset>
+            <div id="kind-fields"></div>
+            <div class="actions">
+                <button type="submit">Сохранить</button>
+                ${isNew ? '' : '<button type="button" class="danger" id="remove">Удалить</button>'}
+            </div>
+        </form>`;
+    const form = page.querySelector('form');
+    const kindSelect = form.querySelector('select[name=kind]');
+    const box = page.querySelector('#kind-fields');
+    let values = {...tenant};
+    const drawFields = () => {
+        const kind = kinds.find(k => k.code === kindSelect.value);
+        box.innerHTML = fieldsForm(kind.fields, values);
+    };
+    kindSelect.addEventListener('change', () => {
+        // введённое сохраняется: общие поля видов (ФИО, ИНН, банк) переходят в новую форму
+        values = {...values, ...Object.fromEntries(new FormData(form))};
+        drawFields();
+    });
+    drawFields();
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const body = Object.fromEntries(new FormData(form));
+        try {
+            const saved = await api(isNew ? 'POST' : 'PUT', isNew ? '/api/tenants' : `/api/tenants/${idText}`, body);
+            showMessage(`Сохранено: ${saved.title}`, false);
+            if (isNew) {
+                location.hash = `#/tenants/${saved.id}`;
+            } else {
+                page.querySelector('h2').textContent = saved.title;
+            }
+        } catch (e) {
+            showMessage(e.message);
+        }
+    });
+    const remove = page.querySelector('#remove');
+    if (remove) {
+        remove.addEventListener('click', async () => {
+            if (!confirm(`Удалить арендатора «${tenant.title}»?`)) {
+                return;
+            }
+            try {
+                await api('DELETE', `/api/tenants/${idText}`);
+                showMessage(`Удалено: ${tenant.title}`, false);
+                location.hash = '#/tenants';
             } catch (e) {
                 showMessage(e.message);
             }

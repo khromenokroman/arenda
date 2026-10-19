@@ -29,4 +29,9 @@ void check_account(std::string const &account);
  */
 void check_account_bik(std::string const &account, std::string const &bik);
 
+/// Серия и номер паспорта РФ: «1234 567890».
+void check_passport(std::string const &passport);
+/// Код подразделения, выдавшего паспорт: «123-456».
+void check_passport_code(std::string const &code);
+
 } // namespace requisites

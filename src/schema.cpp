@@ -8,7 +8,7 @@
 namespace {
 
 /// Миграции схемы. Применённую миграцию не менять: изменения только новой миграцией в конце.
-constexpr std::array<std::string_view, 2> MIGRATIONS = {
+constexpr std::array<std::string_view, 3> MIGRATIONS = {
     // 1: настройки ключ - значение
     R"sql(
 CREATE TABLE settings (
@@ -40,6 +40,36 @@ CREATE TABLE landlords (
     city             TEXT NOT NULL DEFAULT '',
     region_gen       TEXT NOT NULL DEFAULT '',
     municipality_gen TEXT NOT NULL DEFAULT ''
+);
+)sql",
+    // 3: арендаторы трёх видов в одной таблице; поля описаны в Tenants::kinds()
+    R"sql(
+CREATE TABLE tenants (
+    id               INTEGER PRIMARY KEY,
+    kind             TEXT NOT NULL CHECK (kind IN ('ip', 'org', 'person')),
+    name             TEXT NOT NULL DEFAULT '',
+    gender           TEXT NOT NULL DEFAULT '' CHECK (gender IN ('', 'm', 'f')),
+    ogrnip           TEXT NOT NULL DEFAULT '',
+    inn              TEXT NOT NULL DEFAULT '',
+    address          TEXT NOT NULL DEFAULT '',
+    phone            TEXT NOT NULL DEFAULT '',
+    account          TEXT NOT NULL DEFAULT '',
+    bank             TEXT NOT NULL DEFAULT '',
+    bik              TEXT NOT NULL DEFAULT '',
+    name_full        TEXT NOT NULL DEFAULT '',
+    name_short       TEXT NOT NULL DEFAULT '',
+    ogrn             TEXT NOT NULL DEFAULT '',
+    kpp              TEXT NOT NULL DEFAULT '',
+    signer_post      TEXT NOT NULL DEFAULT '',
+    signer_post_gen  TEXT NOT NULL DEFAULT '',
+    signer_name      TEXT NOT NULL DEFAULT '',
+    signer_name_gen  TEXT NOT NULL DEFAULT '',
+    signer_basis_gen TEXT NOT NULL DEFAULT '',
+    birth_date       TEXT NOT NULL DEFAULT '',
+    passport         TEXT NOT NULL DEFAULT '',
+    passport_issued  TEXT NOT NULL DEFAULT '',
+    passport_date    TEXT NOT NULL DEFAULT '',
+    passport_code    TEXT NOT NULL DEFAULT ''
 );
 )sql",
 };

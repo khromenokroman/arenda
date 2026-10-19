@@ -76,3 +76,18 @@ TEST(Requisites, AccountDoesNotMatchBik) {
     SCOPED_TRACE("длина счёта проверяется и при сверке с БИК");
     EXPECT_THROW_REASON(check_account_bik("407028105380001234", "044525225"), UserError, "из 20 цифр");
 }
+
+/**
+ * @brief Паспорт: серия и номер через пробел, код подразделения через дефис.
+ */
+TEST(Requisites, Passport) {
+    EXPECT_NO_THROW(check_passport(""));
+    EXPECT_NO_THROW(check_passport("4510 123456"));
+    EXPECT_NO_THROW(check_passport_code(""));
+    EXPECT_NO_THROW(check_passport_code("770-001"));
+    EXPECT_THROW_REASON(check_passport("4510123456"), UserError, "как «1234 567890»: «4510123456»");
+    EXPECT_THROW_REASON(check_passport("45 10 123456"), UserError, "как «1234 567890»");
+    EXPECT_THROW_REASON(check_passport("4510 12345a"), UserError, "как «1234 567890»");
+    EXPECT_THROW_REASON(check_passport_code("770001"), UserError, "как «123-456»: «770001»");
+    EXPECT_THROW_REASON(check_passport_code("77-0001"), UserError, "как «123-456»");
+}

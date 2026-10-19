@@ -135,4 +135,24 @@ void check_account_bik(std::string const &account, std::string const &bik) {
     }
 }
 
+void check_passport(std::string const &passport) {
+    if (passport.empty()) {
+        return;
+    }
+    std::string_view const text{passport};
+    if (text.size() != 11 || text[4] != ' ' || !all_digits(text.substr(0, 4)) || !all_digits(text.substr(5))) {
+        throw UserError("серия и номер паспорта пишутся как «1234 567890»: «" + passport + "»");
+    }
+}
+
+void check_passport_code(std::string const &code) {
+    if (code.empty()) {
+        return;
+    }
+    std::string_view const text{code};
+    if (text.size() != 7 || text[3] != '-' || !all_digits(text.substr(0, 3)) || !all_digits(text.substr(4))) {
+        throw UserError("код подразделения пишется как «123-456»: «" + code + "»");
+    }
+}
+
 } // namespace requisites

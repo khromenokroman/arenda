@@ -65,7 +65,7 @@ button.danger { color: #cf222e; }
 form.card fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 0 0 12px; padding: 8px 12px 12px; }
 form.card legend { padding: 0 4px; font-weight: 600; }
 form.card label { display: grid; grid-template-columns: minmax(160px, 320px) 1fr; gap: 12px; align-items: center; margin-top: 6px; }
-form.card input { width: 100%; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+form.card input, form.card select { width: 100%; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
 form.card .actions { display: flex; gap: 8px; }
 
 @media (max-width: 640px) {

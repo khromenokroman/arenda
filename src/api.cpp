@@ -56,9 +56,17 @@ std::int64_t path_id(httplib::Request const &req) {
     return id;
 }
 
+/// Арендатор с названием для списков и названием вида.
+nlohmann::json tenant_json(Tenant const &tenant) {
+    auto out = to_json(tenant);
+    out["title"] = Tenants::title(tenant);
+    out["kind_label"] = Tenants::kind(tenant.fields.at("kind")).label;
+    return out;
+}
+
 } // namespace
 
-Api::Api(Database &db, std::string web_dir) : m_web_dir{std::move(web_dir)}, m_landlords{db}, m_db{db} {}
+Api::Api(Database &db, std::string web_dir) : m_web_dir{std::move(web_dir)}, m_landlords{db}, m_tenants{db}, m_db{db} {}
 
 Api::Handler Api::guarded(Handler handler) {
     return [this, handler = std::move(handler)](httplib::Request const &req, httplib::Response &res) {
@@ -79,6 +87,7 @@ void Api::register_routes(httplib::Server &server) {
                    send_json(res, {{"version", ARENDA_VERSION}, {"schema", current_schema_version(m_db)}});
                }));
     register_landlords(server);
+    register_tenants(server);
 
     if (!m_web_dir.empty() && !server.set_mount_point("/", m_web_dir)) {
         throw std::runtime_error("каталог веб-интерфейса не найден: " + m_web_dir);
@@ -129,6 +138,43 @@ void Api::register_landlords(httplib::Server &server) {
 
     server.Delete("/api/landlords/:id", guarded([this](httplib::Request const &req, httplib::Response &res) {
                       m_landlords.remove(path_id(req));
+                      res.status = HTTP_NO_CONTENT;
+                  }));
+}
+
+void Api::register_tenants(httplib::Server &server) {
+    server.Get("/api/tenants/kinds", guarded([](httplib::Request const &, httplib::Response &res) {
+                   auto out = nlohmann::json::array();
+                   for (auto const &kind : Tenants::kinds()) {
+                       out.push_back({{"code", kind.code}, {"label", kind.label}, {"fields", to_json(kind.specs)}});
+                   }
+                   send_json(res, out);
+               }));
+
+    server.Get("/api/tenants", guarded([this](httplib::Request const &, httplib::Response &res) {
+                   auto out = nlohmann::json::array();
+                   for (auto const &tenant : m_tenants.list()) {
+                       out.push_back(tenant_json(tenant));
+                   }
+                   send_json(res, out);
+               }));
+
+    server.Post("/api/tenants", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                    auto const id = m_tenants.create(fields_from_json(parse_object(req.body)));
+                    send_json(res, tenant_json(m_tenants.get(id)), HTTP_CREATED);
+                }));
+
+    server.Get("/api/tenants/:id",
+               guarded([this](httplib::Request const &req, httplib::Response &res) { send_json(res, tenant_json(m_tenants.get(path_id(req)))); }));
+
+    server.Put("/api/tenants/:id", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                   auto const id = path_id(req);
+                   m_tenants.update(id, fields_from_json(parse_object(req.body)));
+                   send_json(res, tenant_json(m_tenants.get(id)));
+               }));
+
+    server.Delete("/api/tenants/:id", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                      m_tenants.remove(path_id(req));
                       res.status = HTTP_NO_CONTENT;
                   }));
 }

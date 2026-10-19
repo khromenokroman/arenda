@@ -30,7 +30,17 @@ Fields fields_from_json(nlohmann::json const &j) {
 nlohmann::json to_json(std::span<FieldSpec const> specs) {
     auto out = nlohmann::json::array();
     for (auto const &spec : specs) {
-        out.push_back({{"key", spec.key}, {"label", spec.label}, {"group", spec.group}, {"hint", spec.hint}, {"required", spec.required}});
+        auto choices = nlohmann::json::array();
+        for (auto const &choice : spec.choices) {
+            choices.push_back({{"value", choice.value}, {"label", choice.label}});
+        }
+        out.push_back({{"key", spec.key},
+                       {"label", spec.label},
+                       {"group", spec.group},
+                       {"hint", spec.hint},
+                       {"required", spec.required},
+                       {"input", to_string(spec.input)},
+                       {"choices", choices}});
     }
     return out;
 }
