@@ -41,6 +41,7 @@ const MENU = [
     {path: 'landlords', title: 'Арендодатели'},
     {path: 'tenants', title: 'Арендаторы'},
     {path: 'users', title: 'Пользователи', admin: true},
+    {path: 'backups', title: 'Копии', admin: true},
 ];
 
 /** Страницы: шаблон адреса и функция отрисовки, параметры из адреса передаются по порядку. */
@@ -54,6 +55,7 @@ const ROUTES = [
     {re: /^tenants\/(new|\d+)$/, render: renderTenant},
     {re: /^users$/, render: renderUsers},
     {re: /^password$/, render: renderPassword},
+    {re: /^backups$/, render: renderBackups},
 ];
 
 let landlordSpecs = null;
@@ -714,6 +716,77 @@ async function renderUsers(page) {
             showMessage(e.message);
         }
     });
+}
+
+/** Размер файла для людей: «1,5 МБ». */
+function fileSize(bytes) {
+    const units = ['Б', 'КБ', 'МБ', 'ГБ'];
+    let value = bytes;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024;
+        unit++;
+    }
+    return `${value.toLocaleString('ru-RU', {maximumFractionDigits: 1})} ${units[unit]}`;
+}
+
+async function renderBackups(page, state = null) {
+    const data = state || await api('GET', '/api/backups');
+    const s = data.schedule;
+    const rows = data.backups.map(b => `<tr>
+            <td>${esc(b.created)}</td><td>${b.scheduled ? 'по расписанию' : 'вручную'}</td><td class="num">${fileSize(b.size)}</td>
+            <td class="actions"><a class="button" href="/api/backups/${encodeURIComponent(b.name)}" download>Скачать</a>
+                <button type="button" class="danger" data-name="${esc(b.name)}">Удалить</button></td>
+        </tr>`).join('');
+    page.innerHTML = `<h2>Резервные копии</h2>
+        <p class="muted">Каталог копий: ${esc(data.dir)}. Восстановление из копии описано в README.</p>
+        <p><button type="button" id="backup-now">Сделать копию сейчас</button></p>
+        <form class="card" id="schedule">
+            <fieldset><legend>Копии по расписанию</legend>
+                <label><span>Делать каждый день</span><input type="checkbox" name="enabled"${s.enabled ? ' checked' : ''}></label>
+                <label><span>Время</span><input type="time" name="time" value="${esc(s.time)}"></label>
+                <label><span>Хранить последних копий</span><input type="number" name="keep" min="1" max="365" value="${s.keep}"></label>
+                <p class="muted">Если в это время сервер выключен, копия сделается после включения в тот же день.
+                    Ручные копии не удаляются.</p>
+                ${s.last_run ? `<p>Последняя копия по расписанию: ${ruDate(s.last_run)}${s.last_error ? ` <span class="error">ошибка: ${esc(s.last_error)}</span>` : ''}</p>` : ''}
+            </fieldset>
+            <div class="actions"><button type="submit">Сохранить расписание</button></div>
+        </form>
+        ${data.backups.length === 0 ? '<p class="muted">Копий пока нет.</p>' : `<table class="list backups">
+            <thead><tr><th>Сделана</th><th>Как</th><th class="num">Размер</th><th></th></tr></thead><tbody>${rows}</tbody></table>`}`;
+    page.querySelector('#backup-now').addEventListener('click', async () => {
+        try {
+            const next = await api('POST', '/api/backups');
+            await renderBackups(page, next);
+            showMessage(`Сделана копия ${next.created}`, false);
+        } catch (e) {
+            showMessage(e.message);
+        }
+    });
+    page.querySelector('#schedule').addEventListener('submit', async event => {
+        event.preventDefault();
+        const form = event.target;
+        try {
+            const next = await api('PUT', '/api/backups/schedule', {
+                enabled: form.enabled.checked, time: form.time.value, keep: Number(form.keep.value),
+            });
+            await renderBackups(page, next);
+            showMessage('Расписание сохранено', false);
+        } catch (e) {
+            showMessage(e.message);
+        }
+    });
+    page.querySelectorAll('button[data-name]').forEach(button => button.addEventListener('click', async () => {
+        if (!confirm(`Удалить копию ${button.dataset.name}?`)) {
+            return;
+        }
+        try {
+            await renderBackups(page, await api('DELETE', `/api/backups/${encodeURIComponent(button.dataset.name)}`));
+            showMessage('Копия удалена', false);
+        } catch (e) {
+            showMessage(e.message);
+        }
+    }));
 }
 
 async function renderPassword(page) {

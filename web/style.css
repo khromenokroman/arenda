@@ -109,3 +109,5 @@ div.actions { display: flex; gap: 8px; flex-wrap: wrap; }
 #account a { color: var(--accent); text-decoration: none; }
 form.login { max-width: 520px; }
 table.users td.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+form.card input[type=checkbox] { width: auto; justify-self: start; }
+table.backups td.actions { display: flex; gap: 6px; }

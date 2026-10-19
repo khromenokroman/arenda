@@ -33,6 +33,7 @@ set(ARENDA_WEB_DIR "${CMAKE_INSTALL_FULL_DATADIR}/${PROJECT_NAME}/web")
 
 add_library(${PROJECT_NAME}-core STATIC
         src/api.cpp
+        src/backups.cpp
         src/card_store.cpp
         src/contract_print.cpp
         ${CMAKE_CURRENT_BINARY_DIR}/contract_template.cpp
@@ -73,6 +74,7 @@ if (BUILD_TESTS)
     find_package(GTest REQUIRED)
     add_executable(${PROJECT_NAME}-tests
             tests/api_test.cpp
+            tests/backups_test.cpp
             tests/contract_print_test.cpp
             tests/contracts_test.cpp
             tests/dadata_test.cpp

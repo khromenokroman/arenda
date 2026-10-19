@@ -2,15 +2,19 @@
 #include <pthread.h>
 #include <unistd.h>
 
+#include <chrono>
+#include <condition_variable>
 #include <csignal>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <mutex>
 #include <string_view>
 #include <thread>
 #include <vector>
 
 #include "api.hpp"
+#include "backups.hpp"
 #include "db.hpp"
 #include "options.hpp"
 #include "schema.hpp"
@@ -51,8 +55,27 @@ int main(int argc, char *argv[]) {
 
         httplib::Server server;
         auto const *const key = std::getenv("ARENDA_DADATA_KEY"); // NOLINT(concurrency-mt-unsafe): до запуска потоков сервера
-        Api api{db, opt.web_dir, DaData{opt.dadata_url, key != nullptr ? key : ""}};
+        Api api{db, opt.web_dir, DaData{opt.dadata_url, key != nullptr ? key : ""}, backup_dir(opt)};
         api.register_routes(server);
+
+        // копии по расписанию: проверка раз в 30 секунд, остановка вместе с сервером
+        std::mutex stop_mutex;
+        std::condition_variable stop_cv;
+        bool stopping = false;
+        std::thread scheduler{[&] {
+            Backups backups{db, backup_dir(opt)};
+            std::unique_lock stop_lock{stop_mutex};
+            while (!stop_cv.wait_for(stop_lock, std::chrono::seconds{30}, [&] { return stopping; })) {
+                auto const lock = db.lock();
+                try {
+                    if (auto const done = backups.run_due(local_now())) {
+                        std::cout << "arenda: копия по расписанию " << (backups.dir() / done->name).string() << "\n" << std::flush;
+                    }
+                } catch (std::exception const &e) {
+                    std::cerr << "arenda: копия по расписанию не удалась: " << e.what() << "\n";
+                }
+            }
+        }};
 
         std::thread waiter{[&server, &signals] {
             int sig = 0;
@@ -72,6 +95,12 @@ int main(int argc, char *argv[]) {
         // будим поток ожидания, если сервер завершился не по сигналу
         kill(getpid(), SIGTERM);
         waiter.join();
+        {
+            std::lock_guard const stop_lock{stop_mutex};
+            stopping = true;
+        }
+        stop_cv.notify_one();
+        scheduler.join();
         return ok ? EXIT_SUCCESS : EXIT_FAILURE;
     } catch (std::exception const &e) {
         std::cerr << "arenda: " << e.what() << "\n";

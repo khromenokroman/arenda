@@ -27,7 +27,10 @@ class TestServer {
    public:
     explicit TestServer(std::string const &web_dir = {}, DaData dadata = {}) : m_db{":memory:"} {
         migrate(m_db);
-        m_api = std::make_unique<Api>(m_db, web_dir, std::move(dadata));
+        m_backup_dir = std::filesystem::temp_directory_path() /
+                       ("arenda-api-backups-" + std::to_string(reinterpret_cast<std::uintptr_t>(this)) + "-" + std::to_string(::getpid()));
+        std::filesystem::remove_all(m_backup_dir);
+        m_api = std::make_unique<Api>(m_db, web_dir, std::move(dadata), m_backup_dir.string());
         m_api->register_routes(m_server);
         m_port = m_server.bind_to_any_port("127.0.0.1");
         m_thread = std::thread{[this] { m_server.listen_after_bind(); }};
@@ -50,6 +53,7 @@ class TestServer {
     ~TestServer() {
         m_server.stop();
         m_thread.join();
+        std::filesystem::remove_all(m_backup_dir);
     }
 
     TestServer(TestServer const &) = delete;
@@ -75,6 +79,7 @@ class TestServer {
     Database m_db;
     std::unique_ptr<Api> m_api;
     std::thread m_thread;
+    std::filesystem::path m_backup_dir;
     std::string m_cookie;
     int m_port = 0;
 };
@@ -540,4 +545,58 @@ TEST(Api, LoginLogoutAndRoles) {
     res = srv.client_as(renewed).Get("/api/landlords");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 401) << "после выхода сессия закрыта";
+}
+
+/**
+ * @brief Резервные копии через HTTP: только администратор; копия, скачивание, расписание, удаление.
+ */
+TEST(Api, Backups) {
+    TestServer srv;
+    auto cli = srv.client();
+    constexpr char const JSON[] = "application/json";
+    auto res = cli.Get("/api/backups");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    auto state = nlohmann::json::parse(res->body);
+    EXPECT_EQ(state.at("schedule").at("enabled"), true) << "расписание включено по умолчанию: " << res->body;
+    EXPECT_EQ(state.at("backups").size(), 0U);
+
+    res = cli.Post("/api/backups", "", JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 201) << res->body;
+    auto const name = nlohmann::json::parse(res->body).at("created").get<std::string>();
+    EXPECT_THAT(name, testing::MatchesRegex(R"(arenda-[0-9]{8}-[0-9]{6}-manual\.db)"));
+
+    res = cli.Get("/api/backups/" + name);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200);
+    EXPECT_THAT(res->get_header_value("Content-Disposition"), HasSubstr(name));
+    EXPECT_EQ(res->body.substr(0, 15), "SQLite format 3") << "скачивается файл базы SQLite";
+
+    res = cli.Put("/api/backups/schedule", R"({"enabled": false, "time": "22:15", "keep": 7})", JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    state = nlohmann::json::parse(res->body).at("schedule");
+    EXPECT_EQ(state.at("time"), "22:15");
+    EXPECT_EQ(state.at("keep"), 7);
+    res = cli.Put("/api/backups/schedule", R"({"time": "25:00"})", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << res->body;
+
+    res = cli.Get("/api/backups/..%2Farenda.db");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404) << "выход из каталога копий: " << res->body;
+
+    res = cli.Post("/api/users", R"({"login": "olga", "password": "secret2"})", JSON);
+    ASSERT_TRUE(res);
+    res = srv.anonymous().Post("/api/auth/login", R"({"login": "olga", "password": "secret2"})", JSON);
+    ASSERT_TRUE(res);
+    res = srv.client_as(TestServer::cookie_of(*res)).Get("/api/backups");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 403) << "копии только у администратора: " << res->body;
+
+    res = cli.Delete("/api/backups/" + name);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    EXPECT_EQ(nlohmann::json::parse(res->body).at("backups").size(), 0U);
 }

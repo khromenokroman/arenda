@@ -13,7 +13,8 @@ struct Options {
     std::string host = "127.0.0.1";                            ///< адрес, на котором слушает сервер
     std::string web_dir = ARENDA_WEB_DIR;                      ///< каталог со страницами веб-интерфейса
     std::string dadata_url = std::string(DaData::DEFAULT_URL); ///< адрес API подсказок DaData
-    int port = 8080;                                           ///< порт HTTP
+    std::string backup_dir; ///< каталог резервных копий; пустой - backups рядом с базой
+    int port = 8080;        ///< порт HTTP
     bool help = false;
     bool version = false;
 };
@@ -29,3 +30,8 @@ struct Options {
  * @brief Текст справки по ключам.
  */
 [[nodiscard]] std::string usage();
+
+/**
+ * @brief Каталог резервных копий: заданный ключом --backup-dir или backups рядом с файлом базы.
+ */
+[[nodiscard]] std::string backup_dir(Options const &opt);

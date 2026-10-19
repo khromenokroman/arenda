@@ -3,8 +3,11 @@
 #include <httplib.h>
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <exception>
+#include <fstream>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <utility>
@@ -129,8 +132,15 @@ std::string optional_string(nlohmann::json const &j, char const *key, std::strin
 
 } // namespace
 
-Api::Api(Database &db, std::string web_dir, DaData dadata)
-    : m_web_dir{std::move(web_dir)}, m_dadata{std::move(dadata)}, m_landlords{db}, m_tenants{db}, m_equipment{db}, m_contracts{db}, m_db{db} {}
+Api::Api(Database &db, std::string web_dir, DaData dadata, std::string backup_dir)
+    : m_web_dir{std::move(web_dir)},
+      m_dadata{std::move(dadata)},
+      m_backups{db, std::move(backup_dir)},
+      m_landlords{db},
+      m_tenants{db},
+      m_equipment{db},
+      m_contracts{db},
+      m_db{db} {}
 
 Api::Handler Api::guarded(Handler handler, bool lock_db) { return guarded(Access::USER, std::move(handler), lock_db); }
 
@@ -173,6 +183,7 @@ void Api::register_routes(httplib::Server &server) {
                    send_json(res, {{"version", ARENDA_VERSION}, {"schema", current_schema_version(m_db)}});
                }));
     register_auth(server);
+    register_backups(server);
     register_landlords(server);
     register_tenants(server);
     register_lookup(server);
@@ -451,5 +462,80 @@ void Api::register_auth(httplib::Server &server) {
                        users.set_password(user.id, string_field(j, "password"));
                    }
                    send_json(res, user_json(users.get(user.id)));
+               }));
+}
+
+void Api::register_backups(httplib::Server &server) {
+    auto const state = [this] {
+        auto const schedule = m_backups.schedule();
+        auto list = nlohmann::json::array();
+        for (auto const &b : m_backups.list()) {
+            list.push_back({{"name", b.name}, {"created", b.created}, {"size", b.size}, {"scheduled", b.scheduled}});
+        }
+        return nlohmann::json{{"dir", m_backups.dir().string()},
+                              {"schedule",
+                               {{"enabled", schedule.enabled},
+                                {"time", schedule.time},
+                                {"keep", schedule.keep},
+                                {"last_run", schedule.last_run},
+                                {"last_error", schedule.last_error}}},
+                              {"backups", list}};
+    };
+
+    server.Get("/api/backups", guarded(Access::ADMIN, [state](httplib::Request const &, httplib::Response &res) { send_json(res, state()); }));
+
+    server.Post("/api/backups", guarded(Access::ADMIN, [this, state](httplib::Request const &, httplib::Response &res) {
+                    auto const backup = m_backups.create(false, local_now());
+                    auto out = state();
+                    out["created"] = backup.name;
+                    send_json(res, out, HTTP_CREATED);
+                }));
+
+    server.Put("/api/backups/schedule", guarded(Access::ADMIN, [this, state](httplib::Request const &req, httplib::Response &res) {
+                   auto const j = parse_object(req.body);
+                   auto schedule = m_backups.schedule();
+                   if (j.contains("enabled")) {
+                       if (!j["enabled"].is_boolean()) {
+                           throw UserError("поле enabled должно быть true или false");
+                       }
+                       schedule.enabled = j["enabled"].get<bool>();
+                   }
+                   if (j.contains("time")) {
+                       schedule.time = string_field(j, "time");
+                   }
+                   if (j.contains("keep")) {
+                       if (!j["keep"].is_number_integer()) {
+                           throw UserError("поле keep должно быть целым числом");
+                       }
+                       schedule.keep = j["keep"].get<int>();
+                   }
+                   m_backups.set_schedule(schedule);
+                   send_json(res, state());
+               }));
+
+    server.Delete("/api/backups/:name", guarded(Access::ADMIN, [this, state](httplib::Request const &req, httplib::Response &res) {
+                      m_backups.remove(req.path_params.at("name"));
+                      send_json(res, state());
+                  }));
+
+    server.Get("/api/backups/:name", guarded(Access::ADMIN, [this](httplib::Request const &req, httplib::Response &res) {
+                   auto const name = req.path_params.at("name");
+                   // файл открывается сейчас: отдаётся целиком, даже если его удалят во время скачивания
+                   auto file = std::make_shared<std::ifstream>(m_backups.path(name), std::ios::binary);
+                   if (!*file) {
+                       throw NotFoundError("не удалось открыть копию " + name);
+                   }
+                   res.set_header("Content-Disposition", "attachment; filename=\"" + name + "\"");
+                   res.set_content_provider("application/vnd.sqlite3", [file](std::size_t, httplib::DataSink &sink) {
+                       std::array<char, std::size_t{64} * 1024> buf{};
+                       file->read(buf.data(), buf.size());
+                       if (file->gcount() > 0) {
+                           sink.write(buf.data(), static_cast<std::size_t>(file->gcount()));
+                       }
+                       if (!*file) {
+                           sink.done();
+                       }
+                       return true;
+                   });
                }));
 }

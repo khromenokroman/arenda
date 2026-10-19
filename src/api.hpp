@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 
+#include "backups.hpp"
 #include "contracts.hpp"
 #include "dadata.hpp"
 #include "db.hpp"
@@ -30,8 +31,9 @@ class Api {
      * @param db база, к которой обращаются обработчики
      * @param web_dir каталог статических страниц; пустой, если раздавать не нужно
      * @param dadata клиент DaData для заполнения реквизитов; без ключа заполнение отвечает подсказкой
+     * @param backup_dir каталог резервных копий
      */
-    Api(Database &db, std::string web_dir, DaData dadata = {});
+    Api(Database &db, std::string web_dir, DaData dadata = {}, std::string backup_dir = "backups");
 
     /// Регистрирует обработчики на сервере.
     void register_routes(httplib::Server &server);
@@ -60,6 +62,7 @@ class Api {
     [[nodiscard]] Handler guarded(Handler handler, bool lock_db = true);
 
     void register_auth(httplib::Server &server);
+    void register_backups(httplib::Server &server);
 
     void register_landlords(httplib::Server &server);
     void register_tenants(httplib::Server &server);
@@ -69,6 +72,7 @@ class Api {
     std::optional<User> m_user; ///< вошедший пользователь текущего запроса; меняется только под блокировкой базы
     std::string m_web_dir;
     DaData m_dadata;
+    Backups m_backups;
     Landlords m_landlords;
     Tenants m_tenants;
     Equipment m_equipment;

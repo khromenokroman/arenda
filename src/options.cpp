@@ -1,6 +1,7 @@
 #include "options.hpp"
 
 #include <charconv>
+#include <filesystem>
 #include <stdexcept>
 
 namespace {
@@ -30,7 +31,7 @@ Options parse_options(std::vector<std::string_view> const &args) {
             opt.version = true;
             continue;
         }
-        if (key != "--db" && key != "--host" && key != "--port" && key != "--web" && key != "--dadata-url") {
+        if (key != "--db" && key != "--host" && key != "--port" && key != "--web" && key != "--dadata-url" && key != "--backup-dir") {
             throw std::invalid_argument("неизвестный ключ: " + std::string(key));
         }
         if (i + 1 >= args.size()) {
@@ -45,6 +46,8 @@ Options parse_options(std::vector<std::string_view> const &args) {
             opt.port = parse_port(value);
         } else if (key == "--dadata-url") {
             opt.dadata_url = value;
+        } else if (key == "--backup-dir") {
+            opt.backup_dir = value;
         } else {
             opt.web_dir = value;
         }
@@ -61,9 +64,17 @@ std::string usage() {
            "  --port ПОРТ    порт HTTP (по умолчанию 8080)\n"
            "  --web КАТАЛОГ  каталог веб-интерфейса (по умолчанию " ARENDA_WEB_DIR
            ")\n"
+           "  --backup-dir КАТАЛОГ  каталог резервных копий (по умолчанию backups рядом с базой)\n"
            "  --dadata-url АДРЕС  адрес API подсказок DaData (по умолчанию https://suggestions.dadata.ru/suggestions/api/4_1/rs)\n"
            "  -v, --version  показать версию\n"
            "  -h, --help     показать эту справку\n"
            "\n"
            "Переменная окружения ARENDA_DADATA_KEY: API-ключ DaData для заполнения реквизитов по ИНН и БИК.\n";
+}
+
+std::string backup_dir(Options const &opt) {
+    if (!opt.backup_dir.empty()) {
+        return opt.backup_dir;
+    }
+    return (std::filesystem::path(opt.db_path).parent_path() / "backups").string();
 }
