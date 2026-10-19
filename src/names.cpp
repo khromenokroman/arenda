@@ -125,10 +125,10 @@ bool ends(std::u32string const &word, std::u32string_view tail) {
 }
 
 /// Заменяет последние count букв на tail.
-std::u32string replace_tail(std::u32string word, std::size_t count, std::u32string_view tail) {
-    word.resize(word.size() - count);
-    word += tail;
-    return word;
+std::u32string replace_tail(std::u32string const &word, std::size_t count, std::u32string_view tail) {
+    std::u32string out{word, 0, word.size() - std::min(count, word.size())};
+    out += tail;
+    return out;
 }
 
 /// Буква перед последними skip буквами (в нижнем регистре); 0, если её нет.
