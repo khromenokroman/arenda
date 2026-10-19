@@ -36,6 +36,7 @@ add_library(${PROJECT_NAME}-core STATIC
         src/json_io.cpp
         src/landlords.cpp
         src/names.cpp
+        src/numbers.cpp
         src/options.cpp
         src/requisites.cpp
         src/schema.cpp
@@ -65,6 +66,7 @@ if (BUILD_TESTS)
             tests/db_test.cpp
             tests/landlords_test.cpp
             tests/names_test.cpp
+            tests/numbers_test.cpp
             tests/options_test.cpp
             tests/requisites_test.cpp
             tests/schema_test.cpp

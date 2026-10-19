@@ -40,6 +40,7 @@ nlohmann::json to_json(std::span<FieldSpec const> specs) {
                        {"hint", spec.hint},
                        {"required", spec.required},
                        {"input", to_string(spec.input)},
+                       {"default", spec.default_value},
                        {"choices", choices}});
     }
     return out;

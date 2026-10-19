@@ -50,3 +50,19 @@ TEST(Schema, RejectsNewerDatabase) {
     db.exec("PRAGMA user_version = " + std::to_string(schema_version() + 1));
     EXPECT_THROW_REASON(migrate(db), DbError, "более новой версией");
 }
+
+/**
+ * @brief Миграция 4 на базе с арендодателем: у существующих карточек условия договоров по умолчанию.
+ */
+TEST(Schema, LandlordTermsDefaultsForOldRows) {
+    Database db{":memory:"};
+    migrate(db, 3);
+    db.exec("INSERT INTO landlords (name_full, name_short) VALUES ('ООО «Старое»', 'Старое')");
+    migrate(db);
+    auto stmt = db.prepare("SELECT fire_fine, contract_limit, lease_months, hours_weekdays FROM landlords");
+    ASSERT_TRUE(stmt.step());
+    EXPECT_EQ(stmt.column_text(0), "5 000");
+    EXPECT_EQ(stmt.column_text(1), "100 000");
+    EXPECT_EQ(stmt.column_text(2), "11");
+    EXPECT_EQ(stmt.column_text(3), "с 09:00 до 18:00");
+}

@@ -22,7 +22,7 @@ Fields clean_fields(std::span<FieldSpec const> specs, Fields const &values) {
     Fields out;
     for (auto const &spec : specs) {
         auto const it = values.find(spec.key);
-        auto value = it == values.end() ? std::string{} : trim(it->second);
+        auto value = it == values.end() ? std::string(spec.default_value) : trim(it->second);
         std::string const label{spec.label};
         if (value.empty() && spec.required) {
             throw UserError("не заполнено поле «" + label + "»");

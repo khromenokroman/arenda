@@ -8,7 +8,7 @@
 namespace {
 
 /// Миграции схемы. Применённую миграцию не менять: изменения только новой миграцией в конце.
-constexpr std::array<std::string_view, 3> MIGRATIONS = {
+constexpr std::array<std::string_view, 4> MIGRATIONS = {
     // 1: настройки ключ - значение
     R"sql(
 CREATE TABLE settings (
@@ -71,6 +71,15 @@ CREATE TABLE tenants (
     passport_date    TEXT NOT NULL DEFAULT '',
     passport_code    TEXT NOT NULL DEFAULT ''
 );
+)sql",
+    // 4: режим работы объекта и условия договоров у арендодателя; значения по умолчанию из образца договора
+    R"sql(
+ALTER TABLE landlords ADD COLUMN hours_weekdays TEXT NOT NULL DEFAULT 'с 09:00 до 18:00';
+ALTER TABLE landlords ADD COLUMN hours_weekends TEXT NOT NULL DEFAULT 'с 09:00 до 16:00';
+ALTER TABLE landlords ADD COLUMN days_off       TEXT NOT NULL DEFAULT '1 и 2 января, Пасха';
+ALTER TABLE landlords ADD COLUMN fire_fine      TEXT NOT NULL DEFAULT '5 000';
+ALTER TABLE landlords ADD COLUMN contract_limit TEXT NOT NULL DEFAULT '100 000';
+ALTER TABLE landlords ADD COLUMN lease_months   TEXT NOT NULL DEFAULT '11';
 )sql",
 };
 

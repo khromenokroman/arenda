@@ -142,3 +142,22 @@ TEST_F(LandlordsTest, RemoveAndNotFound) {
     EXPECT_THROW_REASON(m_landlords.update(id, {}), NotFoundError, "нет арендодателя");
     EXPECT_THROW_REASON(m_landlords.remove(id), NotFoundError, "нет арендодателя");
 }
+
+/**
+ * @brief Условия договоров: новая карточка получает значения по умолчанию, неверные отклоняются.
+ */
+TEST_F(LandlordsTest, Terms) {
+    auto const id = m_landlords.create(sample());
+    auto const got = m_landlords.get(id).fields;
+    EXPECT_EQ(got.at("fire_fine"), "5 000");
+    EXPECT_EQ(got.at("contract_limit"), "100 000");
+    EXPECT_EQ(got.at("lease_months"), "11");
+    EXPECT_EQ(got.at("days_off"), "1 и 2 января, Пасха");
+
+    EXPECT_THROW_REASON(m_landlords.update(id, {{"lease_months", "12"}}), UserError, "срок аренды: нужно число от 1 до 11");
+    EXPECT_THROW_REASON(m_landlords.update(id, {{"contract_limit", "0"}}), UserError, "сумма должна быть больше нуля");
+    EXPECT_THROW_REASON(m_landlords.update(id, {{"fire_fine", "пять тысяч"}}), UserError, "нужно число");
+    EXPECT_THROW_REASON(m_landlords.update(id, {{"contract_limit", ""}}), UserError, "не заполнено поле «Наибольшая сумма одного договора, руб.»");
+    m_landlords.update(id, {{"contract_limit", "150000,50"}});
+    EXPECT_EQ(m_landlords.get(id).fields.at("contract_limit"), "150000,50");
+}

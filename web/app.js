@@ -64,6 +64,11 @@ async function renderLandlords(page) {
         </table>`}`;
 }
 
+/** Значения по умолчанию для новой карточки. */
+function defaults(specs) {
+    return Object.fromEntries(specs.map(s => [s.key, s.default || '']));
+}
+
 /** Поле ввода по описанию: строка, дата или выбор из списка. */
 function fieldInput(spec, value) {
     const name = `name="${esc(spec.key)}"`;
@@ -144,11 +149,12 @@ function fieldsForm(specs, values, party = null) {
 
 async function renderLandlord(page, idText) {
     const isNew = idText === 'new';
-    const [specs, landlord] = await Promise.all([landlordFields(), isNew ? Promise.resolve({}) : api('GET', `/api/landlords/${idText}`)]);
-    page.innerHTML = `<h2>${isNew ? 'Новый арендодатель' : esc(landlord.name_short)}</h2>
+    const [specs, landlord] = await Promise.all([landlordFields(), isNew ? Promise.resolve(null) : api('GET', `/api/landlords/${idText}`)]);
+    const values = landlord || defaults(specs);
+    page.innerHTML = `<h2>${isNew ? 'Новый арендодатель' : esc(values.name_short)}</h2>
         <p><a href="#/landlords">← Арендодатели</a></p>
         <form class="card">
-            ${fieldsForm(specs, landlord, 'landlord')}
+            ${fieldsForm(specs, values, 'landlord')}
             <div class="actions">
                 <button type="submit">Сохранить</button>
                 ${isNew ? '' : '<button type="button" class="danger" id="remove">Удалить</button>'}
@@ -175,12 +181,12 @@ async function renderLandlord(page, idText) {
     const remove = page.querySelector('#remove');
     if (remove) {
         remove.addEventListener('click', async () => {
-            if (!confirm(`Удалить арендодателя «${landlord.name_short}»?`)) {
+            if (!confirm(`Удалить арендодателя «${values.name_short}»?`)) {
                 return;
             }
             try {
                 await api('DELETE', `/api/landlords/${idText}`);
-                showMessage(`Удалено: ${landlord.name_short}`, false);
+                showMessage(`Удалено: ${values.name_short}`, false);
                 location.hash = '#/landlords';
             } catch (e) {
                 showMessage(e.message);

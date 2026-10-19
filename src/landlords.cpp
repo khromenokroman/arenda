@@ -4,6 +4,7 @@
 #include <string>
 
 #include "errors.hpp"
+#include "numbers.hpp"
 #include "requisites.hpp"
 
 namespace {
@@ -12,8 +13,18 @@ constexpr std::string_view ORG = "Организация";
 constexpr std::string_view SIGNER = "Подписант";
 constexpr std::string_view BANK = "Банк";
 constexpr std::string_view OBJECT = "Объект аренды";
+constexpr std::string_view TERMS = "Условия договоров";
 
 constexpr std::size_t LONG_TEXT = 1000;
+
+void check_rubles(std::string const &text) {
+    if (numbers::parse_hundredths(text, "сумма") <= 0) {
+        throw UserError("сумма должна быть больше нуля: «" + text + "»");
+    }
+}
+
+/// Договор аренды меньше года не регистрируется (п. 6.1 договора), поэтому не больше 11 месяцев.
+void check_lease_months(std::string const &text) { (void)numbers::parse_int(text, "срок аренды", 1, MAX_LEASE_MONTHS); }
 
 constexpr std::array SPECS = {
     FieldSpec{.key = "name_full",
@@ -46,6 +57,38 @@ constexpr std::array SPECS = {
     FieldSpec{.key = "region_gen", .label = "Регион в родительном падеже (суд, особый режим)", .group = OBJECT, .hint = "Московской области"},
     FieldSpec{
         .key = "municipality_gen", .label = "Муниципальное образование в родительном падеже", .group = OBJECT, .hint = "городского округа Химки"},
+    FieldSpec{.key = "hours_weekdays",
+              .label = "Режим работы: понедельник - пятница",
+              .group = OBJECT,
+              .hint = "с 09:00 до 18:00",
+              .default_value = "с 09:00 до 18:00"},
+    FieldSpec{.key = "hours_weekends",
+              .label = "Режим работы: суббота, воскресенье и праздничные дни",
+              .group = OBJECT,
+              .hint = "с 09:00 до 16:00",
+              .default_value = "с 09:00 до 16:00"},
+    FieldSpec{.key = "days_off", .label = "Нерабочие дни", .group = OBJECT, .hint = "1 и 2 января, Пасха", .default_value = "1 и 2 января, Пасха"},
+    FieldSpec{.key = "fire_fine",
+              .label = "Штраф за нарушение пожарной безопасности (п. 5.1.7), руб.",
+              .group = TERMS,
+              .hint = "5 000",
+              .check = check_rubles,
+              .required = true,
+              .default_value = "5 000"},
+    FieldSpec{.key = "contract_limit",
+              .label = "Наибольшая сумма одного договора, руб.",
+              .group = TERMS,
+              .hint = "100 000",
+              .check = check_rubles,
+              .required = true,
+              .default_value = "100 000"},
+    FieldSpec{.key = "lease_months",
+              .label = "Общий срок аренды, мес. (делится на договоры)",
+              .group = TERMS,
+              .hint = "11",
+              .check = check_lease_months,
+              .required = true,
+              .default_value = "11"},
 };
 
 } // namespace
