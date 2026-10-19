@@ -30,6 +30,9 @@ curl -s -H "Cookie: $COOKIE" 'http://127.0.0.1:8080/api/lookup/bank?bik=04452522
 curl -sf -X POST http://127.0.0.1:8080/api/landlords -H 'Content-Type: application/json' -H "Cookie: $COOKIE" \
     -d '{"name_full":"ООО «Ромашка»","name_short":"Ромашка"}' >/dev/null && ok "запись в базу" || bad "запись в базу"
 landlords() { curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:$1/api/landlords"; }
+curl -sf -X POST http://127.0.0.1:8080/api/backups -H "Cookie: $COOKIE" >/dev/null \
+    && [ "$(stat -c %U /var/lib/arenda/backups/arenda-*-manual.db 2>/dev/null)" = arenda ] \
+    && ok "резервная копия в /var/lib/arenda/backups" || bad "резервная копия: $(ls -la /var/lib/arenda/backups 2>&1)"
 
 sed -i 's/--port 8080/--port 8081/; s/^ARENDA_DADATA_KEY=""/ARENDA_DADATA_KEY="test-key"/' /etc/default/arenda
 apt-get install -y -qq --reinstall /deb/*.deb >/dev/null 2>&1 || bad "переустановка"

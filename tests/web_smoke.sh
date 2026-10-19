@@ -44,6 +44,7 @@ LANDLORD=$(call POST landlords '{"name_full":"Общество с огранич
 IP=$(call POST tenants '{"kind":"ip","name":"Петров Пётр <b>","gender":"m","inn":"500100732259"}' | id)
 ORG=$(call POST tenants '{"kind":"org","name_full":"ООО «Берёза»","name_short":"ООО «Берёза» <b>","inn":"7707083893"}' | id)
 PERSON=$(call POST tenants '{"kind":"person","name":"Сидорова Анна <b>","gender":"f","birth_date":"1990-05-17","inn":"526317984689"}' | id)
+call POST backups '' >/dev/null
 call PUT "tenants/$IP/equipment" '[{"name":"Станок <b>","model":"Silca","power":"0,55","qty":1}]' >/dev/null
 CONTRACT=$(call POST contracts "{\"landlord_id\":$LANDLORD,\"rows\":[{\"tenant_id\":$IP,\"start\":\"2026-10-19\",\"rent\":\"20 000\"},{\"tenant_id\":$ORG,\"start\":\"2026-11-01\",\"rent\":\"9000\"}]}" | id | head -1)
 
@@ -62,6 +63,7 @@ PAGES=(
     "contracts/$CONTRACT"
     "users"
     "password"
+    "backups"
 )
 
 failed=0

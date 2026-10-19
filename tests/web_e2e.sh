@@ -22,6 +22,7 @@ SCENARIOS=(
     "lookup.js|#/landlords/new"
     "contracts.js|#/contracts"
     "auth.js|#/contracts"
+    "backups.js|#/backups"
 )
 
 node "$DIR/e2e/fake_dadata.js" "$DADATA_PORT" &
