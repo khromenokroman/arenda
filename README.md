@@ -4,7 +4,7 @@
 пользователь ведёт справочники арендодателей и арендаторов, заполняет условия договора и получает
 готовый к печати договор.
 
-Состояние: справочники, заполнение по ИНН, создание договоров с делением срока, печать (версия 0.9.0.0).
+Состояние: справочники, заполнение по ИНН, создание договоров с делением срока, печать, пакет deb (версия 0.10.0.0).
 
 ## Арендодатели
 
@@ -111,12 +111,38 @@ ARENDA_DADATA_KEY=ваш_ключ ./build/arenda --db arenda.db --web web
 Паспортные данные физлиц хранятся в файле базы без шифрования, а входа по паролю нет. Защищайте файл
 базы и не открывайте сервер в сеть (`--host 0.0.0.0`) без необходимости.
 
+## Установка
+
+Пакеты для Debian 12 и 13 лежат в [релизах](https://github.com/khromenokroman/arenda/releases):
+
+```sh
+sudo apt install ./arenda_0.10.0.0_amd64-debian13.deb
+```
+
+Пакет ставит службу `arenda` (systemd, пользователь `arenda`), она запускается сразу и после перезагрузки.
+База: `/var/lib/arenda/arenda.db`. Настройки в `/etc/default/arenda` (права 640, только root):
+
+```sh
+ARENDA_OPTS="--host 127.0.0.1 --port 8080"   # адрес и порт
+ARENDA_DADATA_KEY="ключ"                     # для «Заполнить по ИНН/БИК»
+```
+
+После правки: `sudo systemctl restart arenda`. Интерфейс: http://127.0.0.1:8080/. Пока нет входа по паролю,
+служба слушает только эту машину; `--host 0.0.0.0` откроет справочники и договоры (с паспортами физлиц)
+всем в локальной сети.
+
+Обновление: `sudo apt install ./новый.deb`, настройки и база сохраняются. `apt remove` и `apt purge`
+базу не удаляют: это договоры. Журнал службы: `journalctl -u arenda`.
+
+Выпуск: тег `vX.Y.Z.W`, совпадающий с версией в `CMakeLists.txt`, запускает CI, который собирает пакеты,
+проверяет установку в контейнерах с systemd и публикует релиз.
+
 ## Сборка
 
 Debian 12 или 13:
 
 ```sh
-sudo apt install build-essential cmake libsqlite3-dev libssl-dev nlohmann-json3-dev libgtest-dev libgmock-dev
+sudo apt install build-essential cmake dpkg-dev libsqlite3-dev libssl-dev nlohmann-json3-dev libgtest-dev libgmock-dev
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j"$(nproc)"
 ctest --test-dir build --output-on-failure
@@ -146,7 +172,7 @@ cpp-httplib лежит в `third_party/httplib.h` (header-only, v0.18.7, лиц�
 
 | Метод | Путь | Ответ |
 |---|---|---|
-| GET | `/api/version` | `{"version": "0.9.0.0", "schema": 6}` |
+| GET | `/api/version` | `{"version": "0.10.0.0", "schema": 6}` |
 | GET | `/api/landlords/fields` | описание полей карточки: `[{"key", "label", "group", "hint", "required", "input", "choices"}]` |
 | GET | `/api/landlords` | список `[{"id", поля...}]` по краткому наименованию |
 | POST | `/api/landlords` | создать из `{"поле": "значение"}`, ответ 201 с карточкой |
@@ -184,6 +210,7 @@ CI (`.github/workflows/ci.yml`) на Debian 12 и 13 собирает проек
 tests/web_smoke.sh build/arenda web   # все страницы рисуются без ошибок, null и неэкранированного текста
 tests/web_e2e.sh build/arenda web     # сценарии с кликами из tests/e2e/*.js
 tests/print_pages.sh build/arenda web # договор ровно 4 страницы A4 (нужен pdfinfo из poppler-utils)
+(cd build && cpack -G DEB) && tests/deb_install.sh build trixie   # пакет в контейнере с systemd (docker)
 ```
 
 Отдельно на Debian 12 проверяются clang-format-16 (`.clang-format`) и clang-tidy-16 (`.clang-tidy`,
