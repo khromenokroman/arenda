@@ -46,6 +46,8 @@ TEST(Options, AllKeys) {
     EXPECT_EQ(opt.host, "0.0.0.0");
     EXPECT_EQ(opt.port, 9000);
     EXPECT_EQ(opt.web_dir, "/tmp/web");
+    EXPECT_EQ(parse_options({"--dadata-url", "http://127.0.0.1:9/rs"}).dadata_url, "http://127.0.0.1:9/rs");
+    EXPECT_EQ(parse_options({}).dadata_url, DaData::DEFAULT_URL) << "по умолчанию настоящий DaData";
 }
 
 /**

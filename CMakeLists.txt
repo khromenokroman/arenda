@@ -13,18 +13,23 @@ option(BUILD_TESTS "Собирать тесты" ON)
 find_package(SQLite3 REQUIRED)
 find_package(nlohmann_json 3 REQUIRED)
 find_package(Threads REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 include(GNUInstallDirs)
 
-# cpp-httplib header-only из third_party: пакет Debian собран в разделяемую библиотеку без .a
+# cpp-httplib header-only из third_party: пакет Debian собран в разделяемую библиотеку без .a.
+# HTTPS (запросы к DaData) через OpenSSL; макрос должен быть одинаковым во всех единицах трансляции.
 add_library(httplib INTERFACE)
 target_include_directories(httplib SYSTEM INTERFACE third_party)
+target_compile_definitions(httplib INTERFACE CPPHTTPLIB_OPENSSL_SUPPORT)
+target_link_libraries(httplib INTERFACE OpenSSL::SSL OpenSSL::Crypto)
 
 set(ARENDA_WEB_DIR "${CMAKE_INSTALL_FULL_DATADIR}/${PROJECT_NAME}/web")
 
 add_library(${PROJECT_NAME}-core STATIC
         src/api.cpp
         src/card_store.cpp
+        src/dadata.cpp
         src/dates.cpp
         src/db.cpp
         src/fields.cpp
@@ -55,6 +60,7 @@ if (BUILD_TESTS)
     find_package(GTest REQUIRED)
     add_executable(${PROJECT_NAME}-tests
             tests/api_test.cpp
+            tests/dadata_test.cpp
             tests/dates_test.cpp
             tests/db_test.cpp
             tests/landlords_test.cpp

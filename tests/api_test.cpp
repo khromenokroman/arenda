@@ -13,6 +13,7 @@
 #include <thread>
 
 #include "db.hpp"
+#include "fake_dadata.hpp"
 #include "schema.hpp"
 
 using testing::HasSubstr;
@@ -24,9 +25,9 @@ namespace {
  */
 class TestServer {
    public:
-    explicit TestServer(std::string const &web_dir = {}) : m_db{":memory:"} {
+    explicit TestServer(std::string const &web_dir = {}, DaData dadata = {}) : m_db{":memory:"} {
         migrate(m_db);
-        m_api = std::make_unique<Api>(m_db, web_dir);
+        m_api = std::make_unique<Api>(m_db, web_dir, std::move(dadata));
         m_api->register_routes(m_server);
         m_port = m_server.bind_to_any_port("127.0.0.1");
         m_thread = std::thread{[this] { m_server.listen_after_bind(); }};
@@ -234,4 +235,60 @@ TEST(Api, TenantsCrud) {
     res = cli.Get("/api/tenants/" + id);
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 404) << res->body;
+}
+
+/**
+ * @brief Заполнение по ИНН и БИК через HTTP: поля для нужной карточки, ошибки 400/404/502 с причиной.
+ */
+TEST(Api, Lookup) {
+    fake::FakeDaData dadata;
+    TestServer srv{{}, dadata.client("good")};
+    auto cli = srv.client();
+
+    auto res = cli.Get("/api/lookup/party?for=landlord&inn=7707083893");
+    ASSERT_TRUE(res) << "нет ответа: " << httplib::to_string(res.error());
+    ASSERT_EQ(res->status, 200) << res->body;
+    auto const fields = nlohmann::json::parse(res->body).at("fields");
+    EXPECT_EQ(fields.at("kpp"), "773601001") << res->body;
+    EXPECT_EQ(fields.at("signer_name_gen"), "Петрова Петра Павловича") << res->body;
+
+    res = cli.Get("/api/lookup/party?for=ip&inn=%20500100732259%20");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << "пробелы вокруг ИНН убираются: " << res->body;
+    EXPECT_EQ(nlohmann::json::parse(res->body).at("fields").at("gender"), "f") << res->body;
+
+    res = cli.Get("/api/lookup/bank?bik=044525225");
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 200) << res->body;
+    EXPECT_EQ(nlohmann::json::parse(res->body).at("fields").at("bank"), "ПАО «Сбербанк»") << res->body;
+
+    struct Case {
+        std::string path;
+        int status;
+        std::string reason;
+    };
+    std::vector<Case> const cases = {
+        {"/api/lookup/party?for=bank&inn=7707083893", 400, "параметр for"},
+        {"/api/lookup/party?for=org", 400, "не указан ИНН"},
+        {"/api/lookup/party?for=ip&inn=7707083893", 400, "зарегистрирована организация"},
+        {"/api/lookup/party?for=org&inn=7728168971", 404, "ничего не найдено"},
+    };
+    for (auto const &c : cases) {
+        SCOPED_TRACE(c.path);
+        res = cli.Get(c.path);
+        ASSERT_TRUE(res);
+        EXPECT_EQ(res->status, c.status) << res->body;
+        EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr(c.reason));
+    }
+
+    TestServer no_key;
+    res = no_key.client().Get("/api/lookup/bank?bik=044525225");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << res->body;
+    EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr("ARENDA_DADATA_KEY"));
+
+    TestServer bad_key{{}, dadata.client("bad")};
+    res = bad_key.client().Get("/api/lookup/bank?bik=044525225");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 502) << res->body;
 }

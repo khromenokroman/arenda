@@ -26,6 +26,7 @@ constexpr int HTTP_BAD_REQUEST = 400;
 constexpr int HTTP_NOT_FOUND = 404;
 constexpr int HTTP_PAYLOAD_TOO_LARGE = 413;
 constexpr int HTTP_INTERNAL_ERROR = 500;
+constexpr int HTTP_BAD_GATEWAY = 502;
 
 void send_json(httplib::Response &res, nlohmann::json const &body, int status = HTTP_OK) {
     res.status = status;
@@ -66,17 +67,23 @@ nlohmann::json tenant_json(Tenant const &tenant) {
 
 } // namespace
 
-Api::Api(Database &db, std::string web_dir) : m_web_dir{std::move(web_dir)}, m_landlords{db}, m_tenants{db}, m_db{db} {}
+Api::Api(Database &db, std::string web_dir, DaData dadata)
+    : m_web_dir{std::move(web_dir)}, m_dadata{std::move(dadata)}, m_landlords{db}, m_tenants{db}, m_db{db} {}
 
-Api::Handler Api::guarded(Handler handler) {
-    return [this, handler = std::move(handler)](httplib::Request const &req, httplib::Response &res) {
-        auto const lock = m_db.lock();
+Api::Handler Api::guarded(Handler handler, bool lock_db) {
+    return [this, lock_db, handler = std::move(handler)](httplib::Request const &req, httplib::Response &res) {
+        std::unique_lock<std::mutex> lock;
+        if (lock_db) {
+            lock = m_db.lock();
+        }
         try {
             handler(req, res);
         } catch (UserError const &e) {
             send_error(res, HTTP_BAD_REQUEST, e.what());
         } catch (NotFoundError const &e) {
             send_error(res, HTTP_NOT_FOUND, e.what());
+        } catch (ExternalError const &e) {
+            send_error(res, HTTP_BAD_GATEWAY, e.what());
         }
     };
 }
@@ -88,6 +95,7 @@ void Api::register_routes(httplib::Server &server) {
                }));
     register_landlords(server);
     register_tenants(server);
+    register_lookup(server);
 
     if (!m_web_dir.empty() && !server.set_mount_point("/", m_web_dir)) {
         throw std::runtime_error("каталог веб-интерфейса не найден: " + m_web_dir);
@@ -177,4 +185,29 @@ void Api::register_tenants(httplib::Server &server) {
                       m_tenants.remove(path_id(req));
                       res.status = HTTP_NO_CONTENT;
                   }));
+}
+
+void Api::register_lookup(httplib::Server &server) {
+    // внешний сервис отвечает до нескольких секунд: база на это время не захватывается
+    server.Get("/api/lookup/party", guarded(
+                                        [this](httplib::Request const &req, httplib::Response &res) {
+                                            auto const target = req.get_param_value("for");
+                                            if (target != "landlord" && target != "org" && target != "ip") {
+                                                throw UserError("параметр for: нужен landlord, org или ip");
+                                            }
+                                            auto const inn = trim(req.get_param_value("inn"));
+                                            if (inn.empty()) {
+                                                throw UserError("не указан ИНН");
+                                            }
+                                            auto const data = m_dadata.find_party(inn);
+                                            send_json(res, {{"fields", party_fields(data, target)}});
+                                        },
+                                        false));
+
+    server.Get("/api/lookup/bank", guarded(
+                                       [this](httplib::Request const &req, httplib::Response &res) {
+                                           auto const data = m_dadata.find_bank(trim(req.get_param_value("bik")));
+                                           send_json(res, {{"fields", bank_fields(data)}});
+                                       },
+                                       false));
 }

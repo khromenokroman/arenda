@@ -2,6 +2,7 @@
 #include <functional>
 #include <string>
 
+#include "dadata.hpp"
 #include "db.hpp"
 #include "landlords.hpp"
 #include "tenants.hpp"
@@ -22,8 +23,9 @@ class Api {
     /**
      * @param db база, к которой обращаются обработчики
      * @param web_dir каталог статических страниц; пустой, если раздавать не нужно
+     * @param dadata клиент DaData для заполнения реквизитов; без ключа заполнение отвечает подсказкой
      */
-    Api(Database &db, std::string web_dir);
+    Api(Database &db, std::string web_dir, DaData dadata = {});
 
     /// Регистрирует обработчики на сервере.
     void register_routes(httplib::Server &server);
@@ -32,14 +34,17 @@ class Api {
     using Handler = std::function<void(httplib::Request const &, httplib::Response &)>;
 
     /**
-     * @brief Оборачивает обработчик: захват базы и перевод исключений в ответы 400/404.
+     * @brief Оборачивает обработчик: захват базы и перевод исключений в ответы 400/404/502.
+     * @param lock_db false - без захвата базы (обработчик не обращается к ней, а ждёт внешний сервис)
      */
-    [[nodiscard]] Handler guarded(Handler handler);
+    [[nodiscard]] Handler guarded(Handler handler, bool lock_db = true);
 
     void register_landlords(httplib::Server &server);
     void register_tenants(httplib::Server &server);
+    void register_lookup(httplib::Server &server);
 
     std::string m_web_dir;
+    DaData m_dadata;
     Landlords m_landlords;
     Tenants m_tenants;
     Database &m_db;

@@ -16,3 +16,11 @@ class NotFoundError : public std::runtime_error {
    public:
     using std::runtime_error::runtime_error;
 };
+
+/**
+ * @brief Внешний сервис (DaData) недоступен или ответил ошибкой (HTTP 502).
+ */
+class ExternalError : public std::runtime_error {
+   public:
+    using std::runtime_error::runtime_error;
+};

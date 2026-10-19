@@ -67,7 +67,12 @@ form.card legend { padding: 0 4px; font-weight: 600; }
 form.card label { display: grid; grid-template-columns: minmax(160px, 320px) 1fr; gap: 12px; align-items: center; margin-top: 6px; }
 form.card input, form.card select { width: 100%; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
 form.card .actions { display: flex; gap: 8px; }
+form.card .control { display: flex; gap: 8px; }
+form.card .control button { white-space: nowrap; }
+form.card .filled { background: #fff8c5; }
+button:disabled { opacity: 0.6; cursor: wait; }
 
 @media (max-width: 640px) {
     form.card label { grid-template-columns: 1fr; gap: 2px; }
+    form.card .control { flex-wrap: wrap; }
 }

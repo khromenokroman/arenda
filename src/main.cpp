@@ -50,7 +50,8 @@ int main(int argc, char *argv[]) {
         pthread_sigmask(SIG_BLOCK, &signals, nullptr);
 
         httplib::Server server;
-        Api api{db, opt.web_dir};
+        auto const *const key = std::getenv("ARENDA_DADATA_KEY"); // NOLINT(concurrency-mt-unsafe): до запуска потоков сервера
+        Api api{db, opt.web_dir, DaData{opt.dadata_url, key != nullptr ? key : ""}};
         api.register_routes(server);
 
         std::thread waiter{[&server, &signals] {

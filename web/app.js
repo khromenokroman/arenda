@@ -77,8 +77,56 @@ function fieldInput(spec, value) {
     return `<input type="${type}" ${name} value="${esc(value)}" placeholder="${esc(spec.hint)}">`;
 }
 
-/** Форма карточки по описанию полей: разделы fieldset, подсказка в пустом поле. */
-function fieldsForm(specs, values) {
+/** Кнопка заполнения из DaData рядом с полем ИНН или БИК; party - для кого ищем по ИНН (null - не искать). */
+function lookupButton(spec, party) {
+    if (spec.key === 'inn' && party) {
+        return `<button type="button" data-lookup="party" data-for="${esc(party)}">Заполнить по ИНН</button>`;
+    }
+    if (spec.key === 'bik') {
+        return '<button type="button" data-lookup="bank">Заполнить по БИК</button>';
+    }
+    return '';
+}
+
+/** Заполняет поля формы ответом /api/lookup: только существующие поля, изменённые подсвечиваются. */
+async function lookupFill(form, button) {
+    const isParty = button.dataset.lookup === 'party';
+    const value = form.querySelector(`[name=${isParty ? 'inn' : 'bik'}]`).value.trim();
+    const query = isParty ? `party?for=${encodeURIComponent(button.dataset.for)}&inn=${encodeURIComponent(value)}`
+                          : `bank?bik=${encodeURIComponent(value)}`;
+    button.disabled = true;
+    try {
+        const {fields} = await api('GET', `/api/lookup/${query}`);
+        let count = 0;
+        for (const [key, text] of Object.entries(fields)) {
+            const input = form.querySelector(`[name=${key}]`);
+            if (input && input.value !== text) {
+                input.value = text;
+                input.classList.add('filled');
+                count++;
+            }
+        }
+        const check = fields.signer_name_gen ? ' Проверьте должность и ФИО в родительном падеже: они составлены по правилам.' : '';
+        showMessage(count === 0 ? 'Данные DaData совпадают с введёнными.' : `Заполнено из DaData полей: ${count}. Сохраните карточку.${check}`, false);
+    } catch (e) {
+        showMessage(e.message);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+/** Подключает кнопки «Заполнить по ...» формы. */
+function bindLookup(form) {
+    form.addEventListener('click', event => {
+        const button = event.target.closest('button[data-lookup]');
+        if (button) {
+            lookupFill(form, button);
+        }
+    });
+}
+
+/** Форма карточки по описанию полей: разделы fieldset, подсказка в пустом поле; party - см. lookupButton. */
+function fieldsForm(specs, values, party = null) {
     const groups = [];
     for (const spec of specs) {
         let group = groups.find(g => g.name === spec.group);
@@ -90,7 +138,7 @@ function fieldsForm(specs, values) {
     }
     return groups.map(g => `<fieldset><legend>${esc(g.name)}</legend>
         ${g.specs.map(s => `<label><span>${esc(s.label)}${s.required ? ' *' : ''}</span>
-            ${fieldInput(s, values[s.key] || '')}</label>`).join('')}
+            <span class="control">${fieldInput(s, values[s.key] || '')}${lookupButton(s, party)}</span></label>`).join('')}
         </fieldset>`).join('');
 }
 
@@ -100,19 +148,21 @@ async function renderLandlord(page, idText) {
     page.innerHTML = `<h2>${isNew ? 'Новый арендодатель' : esc(landlord.name_short)}</h2>
         <p><a href="#/landlords">← Арендодатели</a></p>
         <form class="card">
-            ${fieldsForm(specs, landlord)}
+            ${fieldsForm(specs, landlord, 'landlord')}
             <div class="actions">
                 <button type="submit">Сохранить</button>
                 ${isNew ? '' : '<button type="button" class="danger" id="remove">Удалить</button>'}
             </div>
         </form>`;
     const form = page.querySelector('form');
+    bindLookup(form);
     form.addEventListener('submit', async event => {
         event.preventDefault();
         const body = Object.fromEntries(new FormData(form));
         try {
             const saved = await api(isNew ? 'POST' : 'PUT', isNew ? '/api/landlords' : `/api/landlords/${idText}`, body);
             showMessage(`Сохранено: ${saved.name_short}`, false);
+            form.querySelectorAll('.filled').forEach(i => i.classList.remove('filled'));
             if (isNew) {
                 location.hash = `#/landlords/${saved.id}`;
             } else {
@@ -188,7 +238,7 @@ async function renderTenant(page, idText) {
     let values = {...tenant};
     const drawFields = () => {
         const kind = kinds.find(k => k.code === kindSelect.value);
-        box.innerHTML = fieldsForm(kind.fields, values);
+        box.innerHTML = fieldsForm(kind.fields, values, kind.code === 'person' ? null : kind.code);
     };
     kindSelect.addEventListener('change', () => {
         // введённое сохраняется: общие поля видов (ФИО, ИНН, банк) переходят в новую форму
@@ -196,12 +246,14 @@ async function renderTenant(page, idText) {
         drawFields();
     });
     drawFields();
+    bindLookup(form);
     form.addEventListener('submit', async event => {
         event.preventDefault();
         const body = Object.fromEntries(new FormData(form));
         try {
             const saved = await api(isNew ? 'POST' : 'PUT', isNew ? '/api/tenants' : `/api/tenants/${idText}`, body);
             showMessage(`Сохранено: ${saved.title}`, false);
+            form.querySelectorAll('.filled').forEach(i => i.classList.remove('filled'));
             if (isNew) {
                 location.hash = `#/tenants/${saved.id}`;
             } else {
