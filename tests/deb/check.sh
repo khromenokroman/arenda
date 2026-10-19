@@ -30,6 +30,10 @@ curl -s -H "Cookie: $COOKIE" 'http://127.0.0.1:8080/api/lookup/bank?bik=04452522
 curl -sf -X POST http://127.0.0.1:8080/api/landlords -H 'Content-Type: application/json' -H "Cookie: $COOKIE" \
     -d '{"name_full":"ООО «Ромашка»","name_short":"Ромашка"}' >/dev/null && ok "запись в базу" || bad "запись в базу"
 landlords() { curl -s -H "Cookie: $COOKIE" "http://127.0.0.1:$1/api/landlords"; }
+curl -sf -X PUT http://127.0.0.1:8080/api/settings/dadata -H 'Content-Type: application/json' -H "Cookie: $COOKIE" -d '{"key":"web-key"}' >/dev/null
+systemctl restart arenda && wait_http 8080
+curl -s -H "Cookie: $COOKIE" http://127.0.0.1:8080/api/settings | grep -q '"source":"web"' && ok "ключ DaData из веба сохраняется после перезапуска" \
+    || bad "ключ из веба после перезапуска: $(curl -s -H "Cookie: $COOKIE" http://127.0.0.1:8080/api/settings)"
 curl -sf -X POST http://127.0.0.1:8080/api/backups -H "Cookie: $COOKIE" >/dev/null \
     && [ "$(stat -c %U /var/lib/arenda/backups/arenda-*-manual.db 2>/dev/null)" = arenda ] \
     && ok "резервная копия в /var/lib/arenda/backups" || bad "резервная копия: $(ls -la /var/lib/arenda/backups 2>&1)"

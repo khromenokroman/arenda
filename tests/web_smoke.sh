@@ -64,6 +64,7 @@ PAGES=(
     "users"
     "password"
     "backups"
+    "settings"
 )
 
 failed=0

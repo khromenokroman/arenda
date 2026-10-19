@@ -23,6 +23,7 @@ SCENARIOS=(
     "contracts.js|#/contracts"
     "auth.js|#/contracts"
     "backups.js|#/backups"
+    "settings.js|#/settings"
 )
 
 node "$DIR/e2e/fake_dadata.js" "$DADATA_PORT" &
@@ -35,7 +36,10 @@ for entry in "${SCENARIOS[@]}"; do
     hash=${entry#*|}
     [ -n "${E2E_ONLY:-}" ] && [ "$script" != "$E2E_ONLY" ] && continue
     TMP=$(mktemp -d)
-    ARENDA_DADATA_KEY=good "$BIN" --db "$TMP/e2e.db" --web "$WEB" --port "$PORT" \
+    # settings.js проверяет ключ из «Настроек»: у службы ключа нет
+    key=good
+    [ "$script" = settings.js ] && key=
+    ARENDA_DADATA_KEY=$key "$BIN" --db "$TMP/e2e.db" --web "$WEB" --port "$PORT" \
         --dadata-url "http://127.0.0.1:$DADATA_PORT/rs" >"$TMP/server.log" 2>&1 &
     PID=$!
     for _ in $(seq 50); do
