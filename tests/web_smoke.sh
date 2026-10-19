@@ -1,0 +1,70 @@
+#!/bin/bash
+# Проверка страниц веб-интерфейса в headless-браузере.
+# Запускает сервер на временной базе, заполняет её через API и открывает каждую страницу:
+# страница должна нарисовать заголовок <h2>, не показать ошибку и не содержать текста «null» и «undefined».
+#
+# Использование: tests/web_smoke.sh <путь к arenda> <каталог web>
+# Браузер берётся из $CHROME, иначе chromium или google-chrome; нужен node (tests/e2e/drive.js).
+set -euo pipefail
+
+BIN=$1
+WEB=$2
+PORT=${PORT:-18099}
+export CHROME=${CHROME:-$(command -v chromium || command -v google-chrome || true)}
+DIR=$(cd "$(dirname "$0")" && pwd)
+if [ -z "$CHROME" ]; then
+    echo "web_smoke: не найден chromium или google-chrome" >&2
+    exit 2
+fi
+
+TMP=$(mktemp -d)
+"$BIN" --db "$TMP/smoke.db" --web "$WEB" --port "$PORT" >"$TMP/server.log" 2>&1 &
+PID=$!
+trap 'kill $PID 2>/dev/null || true; wait $PID 2>/dev/null || true; rm -rf "$TMP"' EXIT
+for _ in $(seq 50); do
+    curl -sf "http://127.0.0.1:$PORT/api/version" >/dev/null && break
+    sleep 0.1
+done
+
+API=http://127.0.0.1:$PORT/api
+dump_page() { node "$DIR/e2e/drive.js" "http://127.0.0.1:$PORT/#/$1" --dump 2>/dev/null || true; }
+call() { curl -sf -X "$1" "$API/$2" -H 'Content-Type: application/json' -d "$3"; }
+id() { sed -n 's/.*"id":\([0-9]*\).*/\1/p'; }
+
+EMPTY_LIST=$(dump_page landlords)
+LANDLORD=$(call POST landlords '{"name_full":"Общество с ограниченной ответственностью «Ромашка»","name_short":"ООО «Ромашка» <b>","inn":"7707083893"}' | id)
+
+PAGES=(
+    ""
+    "landlords"
+    "landlords/new"
+    "landlords/$LANDLORD"
+)
+
+failed=0
+check() {
+    local page=$1 dom=$2
+    main=$(tr -d '\n' <<<"$dom" | grep -o '<main.*</main>' || true)
+    message=$(grep -oE '<div id="message"[^>]*>[^<]*' <<<"$dom" || true)
+    problems=()
+    grep -q '<h2' <<<"$main" || problems+=("страница не нарисована (нет <h2>)")
+    grep -q 'hidden' <<<"$message" || problems+=("показана ошибка: ${message#*>}")
+    grep -qE '>[^<]*(null|undefined)[^<]*<|value="(null|undefined)"' <<<"$main" && problems+=("в тексте есть null или undefined")
+    grep -q '<b>' <<<"$main" && problems+=("текст из базы вставлен без экранирования")
+    if [ ${#problems[@]} -eq 0 ]; then
+        echo "ok    #/$page"
+    else
+        failed=1
+        printf 'FAIL  #/%s: %s\n' "$page" "$(IFS=';'; echo "${problems[*]}")"
+    fi
+}
+if grep -q 'Арендодателей пока нет' <<<"$EMPTY_LIST"; then
+    echo "ok    пустая база: список арендодателей пуст"
+else
+    failed=1
+    echo "FAIL  пустая база: нет надписи «Арендодателей пока нет»"
+fi
+for page in "${PAGES[@]}"; do
+    check "$page" "$(dump_page "$page")"
+done
+exit $failed
