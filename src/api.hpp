@@ -1,0 +1,39 @@
+#pragma once
+#include <functional>
+#include <string>
+
+#include "db.hpp"
+
+namespace httplib {
+class Server;
+struct Request;
+struct Response;
+} // namespace httplib
+
+/**
+ * @brief HTTP API и раздача веб-интерфейса.
+ *
+ * Все ответы /api/ в JSON; ошибки возвращаются как {"error": "текст"}.
+ */
+class Api {
+   public:
+    /**
+     * @param db база, к которой обращаются обработчики
+     * @param web_dir каталог статических страниц; пустой, если раздавать не нужно
+     */
+    Api(Database &db, std::string web_dir);
+
+    /// Регистрирует обработчики на сервере.
+    void register_routes(httplib::Server &server);
+
+   private:
+    using Handler = std::function<void(httplib::Request const &, httplib::Response &)>;
+
+    /**
+     * @brief Оборачивает обработчик: захват базы и перевод исключений в ответы 400/404.
+     */
+    [[nodiscard]] Handler guarded(Handler handler);
+
+    std::string m_web_dir;
+    Database &m_db;
+};
