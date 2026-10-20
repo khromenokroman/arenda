@@ -20,6 +20,8 @@ TEST(Requisites, EmptyIsAllowed) {
     EXPECT_NO_THROW(check_account(""));
     EXPECT_NO_THROW(check_account_bik("", "044525225")) << "без счёта ключ не проверяется";
     EXPECT_NO_THROW(check_account_bik("40702810538000123456", "")) << "без БИК ключ не проверяется";
+    EXPECT_NO_THROW(check_corr_account(""));
+    EXPECT_NO_THROW(check_corr_account_bik("", "044525225")) << "у банка без корр. счёта (казначейство) поле пустое";
 }
 
 /**
@@ -35,6 +37,9 @@ TEST(Requisites, ValidValues) {
     EXPECT_NO_THROW(check_bik("044525225"));
     EXPECT_NO_THROW(check_account_bik("40702810538000123456", "044525225"));
     EXPECT_NO_THROW(check_account_bik("40817810700000000001", "044525225"));
+    EXPECT_NO_THROW(check_corr_account_bik("30101810400000000225", "044525225"));
+    EXPECT_NO_THROW(check_corr_account_bik("30101810145250000974", "044525974"));
+    EXPECT_NO_THROW(check_corr_account_bik("30101810907020000615", "040702615"));
 }
 
 /**
@@ -75,6 +80,18 @@ TEST(Requisites, AccountDoesNotMatchBik) {
     EXPECT_THROW_REASON(check_account_bik("40702810538000123456", "044525226"), UserError, "не подходит к БИК");
     SCOPED_TRACE("длина счёта проверяется и при сверке с БИК");
     EXPECT_THROW_REASON(check_account_bik("407028105380001234", "044525225"), UserError, "из 20 цифр");
+}
+
+/**
+ * @brief Корреспондентский счёт: начинается с 30101, ключ сходится с БИК своего банка.
+ */
+TEST(Requisites, CorrAccount) {
+    EXPECT_THROW_REASON(check_corr_account("3010181040000000022"), UserError, "Корреспондентский счёт должен состоять из 20 цифр");
+    EXPECT_THROW_REASON(check_corr_account("40702810538000123456"), UserError, "начинается с 30101: «40702810538000123456»");
+    EXPECT_THROW_REASON(check_corr_account_bik("30101810400000000226", "044525225"), UserError,
+                        "корреспондентский счёт «30101810400000000226» не подходит к БИК «044525225»");
+    SCOPED_TRACE("к/с московского банка с БИК банка из другого региона (5-6 цифры БИК в ключе)");
+    EXPECT_THROW_REASON(check_corr_account_bik("30101810400000000225", "040702615"), UserError, "не подходит к БИК");
 }
 
 /**

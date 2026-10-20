@@ -28,6 +28,14 @@ void check_account(std::string const &account);
  * Проверяется, только если заполнены оба реквизита.
  */
 void check_account_bik(std::string const &account, std::string const &bik);
+/// Корреспондентский счёт банка: 20 цифр, начинается с 30101.
+void check_corr_account(std::string const &account);
+/**
+ * @brief Контрольный ключ корреспондентского счёта вместе с БИК («0» + 5-я и 6-я цифры БИК + счёт).
+ *
+ * Проверяется, только если заполнены оба реквизита.
+ */
+void check_corr_account_bik(std::string const &account, std::string const &bik);
 
 /// Серия и номер паспорта РФ: «1234 567890».
 void check_passport(std::string const &passport);

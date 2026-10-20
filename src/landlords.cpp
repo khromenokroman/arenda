@@ -57,6 +57,7 @@ constexpr std::array SPECS = {
     FieldSpec{.key = "account", .label = "Расчётный счёт", .group = BANK, .hint = "20 цифр", .check = requisites::check_account},
     FieldSpec{.key = "bank", .label = "Банк", .group = BANK, .hint = "ПАО «Банк»"},
     FieldSpec{.key = "bik", .label = "БИК", .group = BANK, .hint = "9 цифр", .check = requisites::check_bik},
+    FieldSpec{.key = "corr_account", .label = "Корреспондентский счёт", .group = BANK, .hint = "20 цифр", .check = requisites::check_corr_account},
     FieldSpec{.key = "object_name_gen", .label = "Объект в родительном падеже", .group = OBJECT, .hint = "торгового центра «Ромашка»"},
     FieldSpec{.key = "object_address",
               .label = "Адрес объекта",
@@ -184,6 +185,7 @@ void Landlords::remove(std::int64_t id) {
 Fields Landlords::clean(Fields const &fields, std::int64_t id) const {
     auto out = clean_fields(SPECS, fields);
     requisites::check_account_bik(out.at("account"), out.at("bik"));
+    requisites::check_corr_account_bik(out.at("corr_account"), out.at("bik"));
     auto dup = m_db.prepare("SELECT count(*) FROM landlords WHERE name_short = ? AND id <> ?");
     dup.bind(1, out.at("name_short")).bind(2, id);
     dup.step();

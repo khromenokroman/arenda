@@ -8,7 +8,7 @@
 namespace {
 
 /// Миграции схемы. Применённую миграцию не менять: изменения только новой миграцией в конце.
-constexpr std::array<std::string_view, 8> MIGRATIONS = {
+constexpr std::array<std::string_view, 9> MIGRATIONS = {
     // 1: настройки ключ - значение
     R"sql(
 CREATE TABLE settings (
@@ -144,6 +144,11 @@ ALTER TABLE landlords ADD COLUMN fine_sign          TEXT NOT NULL DEFAULT '2 000
 ALTER TABLE landlords ADD COLUMN fine_control       TEXT NOT NULL DEFAULT '500';
 ALTER TABLE landlords ADD COLUMN fine_transfer      TEXT NOT NULL DEFAULT '2 000';
 ALTER TABLE landlords ADD COLUMN fine_waste         TEXT NOT NULL DEFAULT '2 000';
+)sql",
+    // 9: корреспондентский счёт банка сторон
+    R"sql(
+ALTER TABLE landlords ADD COLUMN corr_account TEXT NOT NULL DEFAULT '';
+ALTER TABLE tenants   ADD COLUMN corr_account TEXT NOT NULL DEFAULT '';
 )sql",
 };
 

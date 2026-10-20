@@ -90,8 +90,9 @@ std::string landlord_requisites(Fields const &l) {
     auto const inn_kpp = field(l, "inn").empty() && field(l, "kpp").empty() ? std::string{} : field(l, "inn") + "/" + field(l, "kpp");
     return "<span class=\"party\">АРЕНДОДАТЕЛЬ:</span><br>" + text_or_blank(field(l, "name_short")) + "<br>" + line("Адрес", field(l, "address")) +
            line("ОГРН", field(l, "ogrn")) + line("ИНН/КПП", inn_kpp) + line("Р/с", field(l, "account")) + line("Банк", field(l, "bank")) +
-           line("БИК", field(l, "bik")) + line("Тел.", field(l, "phone")) + "<div class=\"sign\">" + text_or_blank(field(l, "signer_post")) +
-           " ____________ / " + text_or_blank(names::initials_first(field(l, "signer_name"))) + " /<br>М. П.</div>";
+           line("БИК", field(l, "bik")) + line("К/с", field(l, "corr_account")) + line("Тел.", field(l, "phone")) + "<div class=\"sign\">" +
+           text_or_blank(field(l, "signer_post")) + " ____________ / " + text_or_blank(names::initials_first(field(l, "signer_name"))) +
+           " /<br>М. П.</div>";
 }
 
 std::string tenant_requisites(Tenant const &tenant) {
@@ -115,7 +116,8 @@ std::string tenant_requisites(Tenant const &tenant) {
         sign = "____________ / " + text_or_blank(names::initials_first(field(t, "name"))) + " /";
     }
     if (kind != "person" || !field(t, "account").empty()) {
-        out += line("Р/с", field(t, "account")) + line("Банк", field(t, "bank")) + line("БИК", field(t, "bik"));
+        out +=
+            line("Р/с", field(t, "account")) + line("Банк", field(t, "bank")) + line("БИК", field(t, "bik")) + line("К/с", field(t, "corr_account"));
     }
     out += line("Тел.", field(t, "phone"));
     return out + "<div class=\"sign\">" + sign + "</div>";

@@ -76,12 +76,15 @@ TEST(DaData, WrongPartyType) {
 }
 
 /**
- * @brief Банк по БИК: наименование для платёжных документов.
+ * @brief Банк по БИК: наименование для платёжных документов и корреспондентский счёт; у банка без к/с поле пустое.
  */
 TEST(DaData, Bank) {
     FakeDaData fake;
     auto const f = bank_fields(fake.client("good").find_bank("044525225"));
     EXPECT_EQ(f.at("bank"), "ПАО «Сбербанк»");
+    EXPECT_EQ(f.at("corr_account"), "30101810400000000225");
+    EXPECT_EQ(bank_fields(nlohmann::json::parse(R"({"name": {"payment": "УФК"}, "correspondent_account": null})")).at("corr_account"), "")
+        << "у казначейства корр. счёта нет";
 }
 
 /**

@@ -176,5 +176,5 @@ Fields bank_fields(nlohmann::json const &data) {
     if (name.empty()) {
         name = text_at(data, {"value"});
     }
-    return {{"bank", guillemets(name)}};
+    return {{"bank", guillemets(name)}, {"corr_account", text_at(data, {"correspondent_account"})}};
 }

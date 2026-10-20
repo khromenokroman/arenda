@@ -48,6 +48,16 @@ int mod_prefix(std::string const &text, std::size_t count, int divisor) {
     throw UserError(std::string(what) + " «" + text + "» с ошибкой: не сходится контрольная цифра");
 }
 
+/// Контрольный ключ счёта по ключевому разряду: 23 цифры (3 цифры из БИК + счёт), веса 7, 1, 3.
+bool account_key_ok(std::string const &key) {
+    constexpr std::array<int, 3> WEIGHTS = {7, 1, 3};
+    int sum = 0;
+    for (std::size_t i = 0; i < key.size(); ++i) {
+        sum += (digit(key, i) * WEIGHTS.at(i % WEIGHTS.size())) % 10;
+    }
+    return sum % 10 == 0;
+}
+
 } // namespace
 
 void check_inn_org(std::string const &inn) {
@@ -124,14 +134,30 @@ void check_account_bik(std::string const &account, std::string const &bik) {
     }
     check_account(account);
     check_bik(bik);
-    auto const key = bik.substr(6) + account;
-    constexpr std::array<int, 3> WEIGHTS = {7, 1, 3};
-    int sum = 0;
-    for (std::size_t i = 0; i < key.size(); ++i) {
-        sum += (digit(key, i) * WEIGHTS.at(i % WEIGHTS.size())) % 10;
-    }
-    if (sum % 10 != 0) {
+    if (!account_key_ok(bik.substr(6) + account)) {
         throw UserError("расчётный счёт «" + account + "» не подходит к БИК «" + bik + "»: не сходится контрольный ключ, проверьте счёт и БИК");
+    }
+}
+
+void check_corr_account(std::string const &account) {
+    if (account.empty()) {
+        return;
+    }
+    check_digits("Корреспондентский счёт", account, 20);
+    if (!account.starts_with("30101")) {
+        throw UserError("корреспондентский счёт банка начинается с 30101: «" + account + "»");
+    }
+}
+
+void check_corr_account_bik(std::string const &account, std::string const &bik) {
+    if (account.empty() || bik.empty()) {
+        return;
+    }
+    check_corr_account(account);
+    check_bik(bik);
+    if (!account_key_ok("0" + bik.substr(4, 2) + account)) {
+        throw UserError("корреспондентский счёт «" + account + "» не подходит к БИК «" + bik +
+                        "»: не сходится контрольный ключ, проверьте счёт и БИК");
     }
 }
 

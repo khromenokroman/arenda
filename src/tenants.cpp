@@ -27,6 +27,8 @@ constexpr FieldSpec PHONE{.key = "phone", .label = "Телефон", .group = MA
 constexpr FieldSpec ACCOUNT{.key = "account", .label = "Расчётный счёт", .group = BANK, .hint = "20 цифр", .check = requisites::check_account};
 constexpr FieldSpec BANK_NAME{.key = "bank", .label = "Банк", .group = BANK, .hint = "ПАО «Банк»"};
 constexpr FieldSpec BIK{.key = "bik", .label = "БИК", .group = BANK, .hint = "9 цифр", .check = requisites::check_bik};
+constexpr FieldSpec CORR_ACCOUNT{
+    .key = "corr_account", .label = "Корреспондентский счёт", .group = BANK, .hint = "20 цифр", .check = requisites::check_corr_account};
 
 /// Площадь в кв. м: положительное число с двумя знаками после запятой.
 void check_area(std::string const &text) {
@@ -64,6 +66,7 @@ constexpr std::array IP_SPECS = {
     ACCOUNT,
     BANK_NAME,
     BIK,
+    CORR_ACCOUNT,
     AREA,
     TRADE_AREA,
     FLOOR,
@@ -93,6 +96,7 @@ constexpr std::array ORG_SPECS = {
     ACCOUNT,
     BANK_NAME,
     BIK,
+    CORR_ACCOUNT,
     AREA,
     TRADE_AREA,
     FLOOR,
@@ -120,6 +124,7 @@ constexpr std::array PERSON_SPECS = {
     ACCOUNT,
     BANK_NAME,
     BIK,
+    CORR_ACCOUNT,
     AREA,
     TRADE_AREA,
     FLOOR,
@@ -232,6 +237,7 @@ Fields Tenants::clean(std::string const &kind_code, Fields const &fields) {
         throw UserError(std::string(info.label) + ": " + e.what());
     }
     requisites::check_account_bik(out.at("account"), out.at("bik"));
+    requisites::check_corr_account_bik(out.at("corr_account"), out.at("bik"));
     out.emplace("kind", kind_code);
     return out;
 }

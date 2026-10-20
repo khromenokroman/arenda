@@ -27,7 +27,7 @@ http.createServer((req, res) => {
         const suggestions = [];
         if (req.url.endsWith('/findById/party') && query === LEGAL.inn) suggestions.push({value: 'ТД', data: LEGAL});
         if (req.url.endsWith('/findById/party') && query === INDIVIDUAL.inn) suggestions.push({value: 'ИП', data: INDIVIDUAL});
-        if (req.url.endsWith('/findById/bank') && query === '044525225') suggestions.push({value: 'Банк', data: {name: {payment: 'ПАО "Сбербанк"'}}});
+        if (req.url.endsWith('/findById/bank') && query === '044525225') suggestions.push({value: 'Банк', data: {name: {payment: 'ПАО "Сбербанк"'}, correspondent_account: '30101810400000000225'}});
         res.writeHead(200, {'Content-Type': 'application/json'});
         res.end(JSON.stringify({suggestions}));
     });

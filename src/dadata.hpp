@@ -59,5 +59,5 @@ class DaData {
  */
 [[nodiscard]] Fields party_fields(nlohmann::json const &data, std::string_view target);
 
-/// Поля банка из данных DaData: {"bank": наименование для платёжных документов}.
+/// Поля банка из данных DaData: {"bank": наименование для платёжных документов, "corr_account": корр. счёт или пусто}.
 [[nodiscard]] Fields bank_fields(nlohmann::json const &data);

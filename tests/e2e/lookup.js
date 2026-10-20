@@ -24,6 +24,7 @@ input('bik').value = '044525225';
 lookup('bank').click();
 await sleep(600);
 expect(input('bank').value === 'ПАО «Сбербанк»', 'банк: ' + input('bank').value);
+expect(input('corr_account').value === '30101810400000000225', 'корр. счёт: ' + input('corr_account').value);
 
 btn('Сохранить').click();
 await sleep(600);

@@ -53,7 +53,8 @@ class FakeDaData {
             } else if (req.path_params.at("method") == "party" && query == "500100732259") {
                 suggestions.push_back({{"value", "ИП"}, {"data", individual_data()}});
             } else if (req.path_params.at("method") == "bank" && query == "044525225") {
-                suggestions.push_back({{"value", "ПАО Сбербанк"}, {"data", {{"name", {{"payment", "ПАО \"Сбербанк\""}}}}}});
+                suggestions.push_back({{"value", "ПАО Сбербанк"},
+                                       {"data", {{"name", {{"payment", "ПАО \"Сбербанк\""}}}, {"correspondent_account", "30101810400000000225"}}}});
             }
             res.set_content(nlohmann::json{{"suggestions", suggestions}}.dump(), "application/json");
         });
