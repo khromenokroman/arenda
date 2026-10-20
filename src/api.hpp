@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 
+#include "activities.hpp"
 #include "backups.hpp"
 #include "contracts.hpp"
 #include "dadata.hpp"
@@ -67,6 +68,7 @@ class Api {
 
     void register_landlords(httplib::Server &server);
     void register_tenants(httplib::Server &server);
+    void register_activities(httplib::Server &server);
     void register_lookup(httplib::Server &server);
     void register_contracts(httplib::Server &server);
     void register_settings(httplib::Server &server);
@@ -82,6 +84,7 @@ class Api {
     Backups m_backups;
     Landlords m_landlords;
     Tenants m_tenants;
+    Activities m_activities;
     Equipment m_equipment;
     Contracts m_contracts;
     Database &m_db;

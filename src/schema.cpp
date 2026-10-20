@@ -8,7 +8,7 @@
 namespace {
 
 /// Миграции схемы. Применённую миграцию не менять: изменения только новой миграцией в конце.
-constexpr std::array<std::string_view, 9> MIGRATIONS = {
+constexpr std::array<std::string_view, 10> MIGRATIONS = {
     // 1: настройки ключ - значение
     R"sql(
 CREATE TABLE settings (
@@ -149,6 +149,16 @@ ALTER TABLE landlords ADD COLUMN fine_waste         TEXT NOT NULL DEFAULT '2 000
     R"sql(
 ALTER TABLE landlords ADD COLUMN corr_account TEXT NOT NULL DEFAULT '';
 ALTER TABLE tenants   ADD COLUMN corr_account TEXT NOT NULL DEFAULT '';
+)sql",
+    // 10: виды деятельности; поля описаны в Activities::specs()
+    R"sql(
+CREATE TABLE activities (
+    id                 INTEGER PRIMARY KEY,
+    name               TEXT NOT NULL UNIQUE,
+    purpose            TEXT NOT NULL DEFAULT '',
+    activity_gen       TEXT NOT NULL DEFAULT '',
+    premises_condition TEXT NOT NULL DEFAULT ''
+);
 )sql",
 };
 

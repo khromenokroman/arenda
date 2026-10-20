@@ -39,12 +39,14 @@ EMPTY_LIST=$(dump_page landlords)
 EMPTY_TENANTS=$(dump_page tenants)
 EMPTY_CONTRACTS=$(dump_page contracts)
 EMPTY_NEW=$(dump_page contracts/new)
+EMPTY_ACTIVITIES=$(dump_page activities)
 LANDLORD=$(call POST landlords '{"name_full":"Общество с ограниченной ответственностью «Ромашка»","name_short":"ООО «Ромашка» <b>","inn":"7707083893"}' | id)
 
 IP=$(call POST tenants '{"kind":"ip","name":"Петров Пётр <b>","gender":"m","inn":"500100732259"}' | id)
 ORG=$(call POST tenants '{"kind":"org","name_full":"ООО «Берёза»","name_short":"ООО «Берёза» <b>","inn":"7707083893"}' | id)
 PERSON=$(call POST tenants '{"kind":"person","name":"Сидорова Анна <b>","gender":"f","birth_date":"1990-05-17","inn":"526317984689"}' | id)
 call POST backups '' >/dev/null
+ACTIVITY=$(call POST activities '{"name":"Металлоремонт <b>","purpose":"оказания услуг <b>"}' | id)
 call PUT "tenants/$IP/equipment" '[{"name":"Станок <b>","model":"Silca","power":"0,55","qty":1}]' >/dev/null
 CONTRACT=$(call POST contracts "{\"landlord_id\":$LANDLORD,\"rows\":[{\"tenant_id\":$IP,\"start\":\"2026-10-19\",\"rent\":\"20 000\"},{\"tenant_id\":$ORG,\"start\":\"2026-11-01\",\"rent\":\"9000\"}]}" | id | head -1)
 
@@ -58,6 +60,9 @@ PAGES=(
     "tenants/$IP"
     "tenants/$ORG"
     "tenants/$PERSON"
+    "activities"
+    "activities/new"
+    "activities/$ACTIVITY"
     "contracts"
     "contracts/new"
     "contracts/$CONTRACT"
@@ -113,6 +118,12 @@ if grep -q 'Договоров пока нет' <<<"$EMPTY_CONTRACTS" && grep -q
 else
     failed=1
     echo "FAIL  пустая база: нет надписи «Договоров пока нет» или «Сначала заведите»"
+fi
+if grep -q 'Видов деятельности пока нет' <<<"$EMPTY_ACTIVITIES"; then
+    echo "ok    пустая база: список видов деятельности пуст"
+else
+    failed=1
+    echo "FAIL  пустая база: нет надписи «Видов деятельности пока нет»"
 fi
 for page in "${PAGES[@]}"; do
     check "$page" "$(dump_page "$page")"

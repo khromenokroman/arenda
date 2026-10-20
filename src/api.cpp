@@ -160,6 +160,7 @@ Api::Api(Database &db, std::string web_dir, DaData dadata, std::string backup_di
       m_backups{db, std::move(backup_dir)},
       m_landlords{db},
       m_tenants{db},
+      m_activities{db},
       m_equipment{db},
       m_contracts{db},
       m_db{db} {
@@ -215,6 +216,7 @@ void Api::register_routes(httplib::Server &server) {
     register_backups(server);
     register_landlords(server);
     register_tenants(server);
+    register_activities(server);
     register_lookup(server);
     register_contracts(server);
     register_settings(server);
@@ -268,6 +270,38 @@ void Api::register_landlords(httplib::Server &server) {
 
     server.Delete("/api/landlords/:id", guarded([this](httplib::Request const &req, httplib::Response &res) {
                       m_landlords.remove(path_id(req));
+                      res.status = HTTP_NO_CONTENT;
+                  }));
+}
+
+void Api::register_activities(httplib::Server &server) {
+    server.Get("/api/activities/fields",
+               guarded([](httplib::Request const &, httplib::Response &res) { send_json(res, to_json(Activities::specs())); }));
+
+    server.Get("/api/activities", guarded([this](httplib::Request const &, httplib::Response &res) {
+                   auto out = nlohmann::json::array();
+                   for (auto const &activity : m_activities.list()) {
+                       out.push_back(to_json(activity));
+                   }
+                   send_json(res, out);
+               }));
+
+    server.Post("/api/activities", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                    auto const id = m_activities.create(fields_from_json(parse_object(req.body)));
+                    send_json(res, to_json(m_activities.get(id)), HTTP_CREATED);
+                }));
+
+    server.Get("/api/activities/:id",
+               guarded([this](httplib::Request const &req, httplib::Response &res) { send_json(res, to_json(m_activities.get(path_id(req)))); }));
+
+    server.Put("/api/activities/:id", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                   auto const id = path_id(req);
+                   m_activities.update(id, fields_from_json(parse_object(req.body)));
+                   send_json(res, to_json(m_activities.get(id)));
+               }));
+
+    server.Delete("/api/activities/:id", guarded([this](httplib::Request const &req, httplib::Response &res) {
+                      m_activities.remove(path_id(req));
                       res.status = HTTP_NO_CONTENT;
                   }));
 }

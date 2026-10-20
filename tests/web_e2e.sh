@@ -19,6 +19,7 @@ export CHROME=${CHROME:-$(command -v chromium || command -v google-chrome || tru
 SCENARIOS=(
     "landlords.js|#/landlords"
     "tenants.js|#/tenants/new"
+    "activities.js|#/activities"
     "lookup.js|#/landlords/new"
     "contracts.js|#/contracts"
     "auth.js|#/contracts"

@@ -40,6 +40,7 @@ const MENU = [
     {path: 'contracts', title: 'Договоры'},
     {path: 'landlords', title: 'Арендодатели'},
     {path: 'tenants', title: 'Арендаторы'},
+    {path: 'activities', title: 'Виды деятельности'},
     {path: 'users', title: 'Пользователи', admin: true},
     {path: 'backups', title: 'Копии', admin: true},
     {path: 'settings', title: 'Настройки', admin: true},
@@ -54,6 +55,8 @@ const ROUTES = [
     {re: /^landlords\/(new|\d+)$/, render: renderLandlord},
     {re: /^tenants$/, render: renderTenants},
     {re: /^tenants\/(new|\d+)$/, render: renderTenant},
+    {re: /^activities$/, render: renderActivities},
+    {re: /^activities\/(new|\d+)$/, render: renderActivity},
     {re: /^users$/, render: renderUsers},
     {re: /^password$/, render: renderPassword},
     {re: /^backups$/, render: renderBackups},
@@ -214,6 +217,101 @@ async function renderLandlord(page, idText) {
     }
 }
 
+async function renderActivities(page) {
+    const list = await api('GET', '/api/activities');
+    const rows = list.map(a => `<tr data-id="${a.id}">
+            <td><a href="#/activities/${a.id}">${esc(a.name)}</a></td>
+            <td>${esc(a.purpose)}</td>
+        </tr>`).join('');
+    page.innerHTML = `<h2>Виды деятельности</h2>
+        <p class="muted">Типовые тексты договора. В карточке арендатора их выбирают в разделе «Арендуемое место»:
+            тексты копируются в карточку, и правка справочника заведённых арендаторов не меняет.</p>
+        <p><a class="button" href="#/activities/new">+ вид деятельности</a></p>
+        ${list.length === 0 ? '<p class="muted">Видов деятельности пока нет.</p>' : `<table class="list">
+            <thead><tr><th>Название</th><th>Назначение помещения</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`}`;
+}
+
+async function renderActivity(page, idText) {
+    const isNew = idText === 'new';
+    const [specs, activity] = await Promise.all([
+        api('GET', '/api/activities/fields'),
+        isNew ? Promise.resolve(null) : api('GET', `/api/activities/${idText}`),
+    ]);
+    const values = activity || defaults(specs);
+    page.innerHTML = `<h2>${isNew ? 'Новый вид деятельности' : esc(values.name)}</h2>
+        <p><a href="#/activities">← Виды деятельности</a></p>
+        <form class="card">
+            ${fieldsForm(specs, values)}
+            <div class="actions">
+                <button type="submit">Сохранить</button>
+                ${isNew ? '' : '<button type="button" class="danger" id="remove">Удалить</button>'}
+            </div>
+        </form>`;
+    const form = page.querySelector('form');
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        try {
+            const saved = await api(isNew ? 'POST' : 'PUT', isNew ? '/api/activities' : `/api/activities/${idText}`,
+                                    Object.fromEntries(new FormData(form)));
+            navigate('#/activities', `Сохранено: ${saved.name}`);
+        } catch (e) {
+            showMessage(e.message);
+        }
+    });
+    const remove = page.querySelector('#remove');
+    if (remove) {
+        remove.addEventListener('click', async () => {
+            if (!confirm(`Удалить вид деятельности «${values.name}»? Карточки арендаторов не изменятся.`)) {
+                return;
+            }
+            try {
+                await api('DELETE', `/api/activities/${idText}`);
+                navigate('#/activities', `Удалено: ${values.name}`);
+            } catch (e) {
+                showMessage(e.message);
+            }
+        });
+    }
+}
+
+/** Тексты вида деятельности, которые копируются в карточку арендатора. */
+const ACTIVITY_TEXTS = ['purpose', 'activity_gen', 'premises_condition'];
+
+/** Выбор вида деятельности перед полем назначения: заполняет тексты договора в форме. */
+function activityPicker(box, activities) {
+    const purpose = box.querySelector('[name=purpose]');
+    if (!purpose) {
+        return;
+    }
+    const html = activities.length === 0
+        ? `<p class="muted">Типовые тексты можно завести в справочнике <a href="#/activities">«Виды деятельности»</a> и выбирать здесь.</p>`
+        : `<label><span>Вид деятельности из справочника</span><span class="control"><select id="activity-pick">
+            <option value="">не выбран</option>
+            ${activities.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}
+           </select></span></label>`;
+    purpose.closest('label').insertAdjacentHTML('beforebegin', html);
+    const pick = box.querySelector('#activity-pick');
+    if (!pick) {
+        return;
+    }
+    pick.addEventListener('change', () => {
+        const activity = activities.find(a => String(a.id) === pick.value);
+        if (!activity) {
+            return;
+        }
+        for (const key of ACTIVITY_TEXTS) {
+            const input = box.querySelector(`[name=${key}]`);
+            if (input.value !== activity[key]) {
+                input.value = activity[key];
+                input.classList.add('filled');
+            }
+        }
+        showMessage(`Тексты «${activity.name}» подставлены. Сохраните карточку.`, false);
+    });
+}
+
 let tenantKinds = null;
 
 async function tenantKindList() {
@@ -266,10 +364,11 @@ function totalPower(rows) {
 
 async function renderTenant(page, idText) {
     const isNew = idText === 'new';
-    const [kinds, tenant, equipment] = await Promise.all([
+    const [kinds, tenant, equipment, activities] = await Promise.all([
         tenantKindList(),
         isNew ? Promise.resolve({kind: 'ip'}) : api('GET', `/api/tenants/${idText}`),
         isNew ? Promise.resolve([]) : api('GET', `/api/tenants/${idText}/equipment`),
+        api('GET', '/api/activities'),
     ]);
     const kindOptions = kinds
         .map(k => `<option value="${esc(k.code)}"${k.code === tenant.kind ? ' selected' : ''}>${esc(k.label)}</option>`)
@@ -301,6 +400,7 @@ async function renderTenant(page, idText) {
     const drawFields = () => {
         const kind = kinds.find(k => k.code === kindSelect.value);
         box.innerHTML = fieldsForm(kind.fields, values, kind.code === 'person' ? null : kind.code);
+        activityPicker(box, activities);
     };
     kindSelect.addEventListener('change', () => {
         // введённое сохраняется: общие поля видов (ФИО, ИНН, банк) переходят в новую форму

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 
+#include "activities.hpp"
 #include "contracts.hpp"
 #include "dates.hpp"
 #include "errors.hpp"
@@ -43,19 +44,6 @@ constexpr FieldSpec AREA{.key = "area", .label = "Площадь по напол
 constexpr FieldSpec TRADE_AREA{
     .key = "trade_area", .label = "Площадь для торговли (гл. 26.5 НК РФ), кв. м", .group = PLACE, .hint = "10", .check = check_area};
 constexpr FieldSpec FLOOR{.key = "floor", .label = "Этаж", .group = PLACE, .hint = "1", .check = check_floor};
-constexpr FieldSpec PURPOSE{.key = "purpose",
-                            .label = "Назначение помещения (п. 1.3: «для ...»)",
-                            .group = PLACE,
-                            .hint = "оказания услуг по металлоремонту (изготовление ключей, ремонт мелких металлических изделий)",
-                            .max_size = LONG_TEXT};
-constexpr FieldSpec ACTIVITY{
-    .key = "activity_gen", .label = "Вид деятельности коротко (п. 2.1.2: «необходимые для ...»)", .group = PLACE, .hint = "металлоремонта"};
-constexpr FieldSpec CONDITION{.key = "premises_condition",
-                              .label = "Состояние помещения при передаче",
-                              .group = PLACE,
-                              .hint = "удовлетворительное, пригодно для использования по назначению",
-                              .max_size = LONG_TEXT};
-
 constexpr std::array IP_SPECS = {
     PERSON_NAME,
     GENDER,
@@ -70,9 +58,9 @@ constexpr std::array IP_SPECS = {
     AREA,
     TRADE_AREA,
     FLOOR,
-    PURPOSE,
-    ACTIVITY,
-    CONDITION,
+    PURPOSE_SPEC,
+    ACTIVITY_SPEC,
+    CONDITION_SPEC,
 };
 
 constexpr std::array ORG_SPECS = {
@@ -100,9 +88,9 @@ constexpr std::array ORG_SPECS = {
     AREA,
     TRADE_AREA,
     FLOOR,
-    PURPOSE,
-    ACTIVITY,
-    CONDITION,
+    PURPOSE_SPEC,
+    ACTIVITY_SPEC,
+    CONDITION_SPEC,
 };
 
 constexpr std::array PERSON_SPECS = {
@@ -128,9 +116,9 @@ constexpr std::array PERSON_SPECS = {
     AREA,
     TRADE_AREA,
     FLOOR,
-    PURPOSE,
-    ACTIVITY,
-    CONDITION,
+    PURPOSE_SPEC,
+    ACTIVITY_SPEC,
+    CONDITION_SPEC,
 };
 
 constexpr std::array KINDS = {

@@ -219,6 +219,48 @@ TEST(Api, LandlordsErrors) {
 }
 
 /**
+ * @brief Виды деятельности через HTTP: описание полей, создание, список, изменение, удаление, отказ с причиной.
+ */
+TEST(Api, ActivitiesCrud) {
+    TestServer srv;
+    auto cli = srv.client();
+    constexpr char const JSON[] = "application/json";
+
+    auto res = cli.Get("/api/activities/fields");
+    ASSERT_TRUE(res) << "нет ответа: " << httplib::to_string(res.error());
+    auto const specs = nlohmann::json::parse(res->body);
+    ASSERT_EQ(specs.size(), 4U) << res->body;
+    EXPECT_EQ(specs[1].at("key"), "purpose") << res->body;
+
+    res = cli.Post("/api/activities", R"({"name": "Металлоремонт", "activity_gen": "металлоремонта"})", JSON);
+    ASSERT_TRUE(res);
+    ASSERT_EQ(res->status, 201) << res->body;
+    auto const id = nlohmann::json::parse(res->body).at("id").get<std::int64_t>();
+
+    res = cli.Put("/api/activities/" + std::to_string(id), R"({"premises_condition": "хорошее"})", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(nlohmann::json::parse(res->body).at("premises_condition"), "хорошее") << res->body;
+
+    res = cli.Post("/api/activities", R"({"name": "Металлоремонт"})", JSON);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400) << res->body;
+    EXPECT_THAT(nlohmann::json::parse(res->body).at("error").get<std::string>(), HasSubstr("уже есть"));
+
+    res = cli.Get("/api/activities");
+    ASSERT_TRUE(res);
+    auto const list = nlohmann::json::parse(res->body);
+    ASSERT_EQ(list.size(), 1U) << res->body;
+    EXPECT_EQ(list[0].at("activity_gen"), "металлоремонта");
+
+    res = cli.Delete("/api/activities/" + std::to_string(id));
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 204) << res->body;
+    res = cli.Get("/api/activities/" + std::to_string(id));
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404) << res->body;
+}
+
+/**
  * @brief Арендаторы через HTTP: виды с полями, создание, название и вид в ответе, смена вида, удаление.
  */
 TEST(Api, TenantsCrud) {
@@ -496,8 +538,8 @@ TEST(Api, Print) {
 TEST(Api, LoginRequired) {
     TestServer srv;
     auto cli = srv.anonymous();
-    for (auto const *path :
-         {"/api/landlords", "/api/tenants", "/api/contracts", "/api/users", "/print/contracts?ids=1", "/api/lookup/bank?bik=044525225"}) {
+    for (auto const *path : {"/api/landlords", "/api/tenants", "/api/activities", "/api/contracts", "/api/users", "/print/contracts?ids=1",
+                             "/api/lookup/bank?bik=044525225"}) {
         SCOPED_TRACE(path);
         auto const res = cli.Get(path);
         ASSERT_TRUE(res);

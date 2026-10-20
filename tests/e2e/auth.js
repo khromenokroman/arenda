@@ -19,7 +19,7 @@ fill({login: 'admin', password: 'secret1'});
 btn('Войти').click();
 await sleep(1200);
 expect(document.querySelector('h2').textContent === 'Договоры', 'после входа не открылись договоры: ' + document.querySelector('h2').textContent);
-expect(menu() === 'Договоры, Арендодатели, Арендаторы, Пользователи, Копии, Настройки', 'меню администратора: ' + menu());
+expect(menu() === 'Договоры, Арендодатели, Арендаторы, Виды деятельности, Пользователи, Копии, Настройки', 'меню администратора: ' + menu());
 
 location.hash = '#/users';
 await sleep(500);
@@ -34,7 +34,7 @@ expect(document.querySelector('h2').textContent === 'Вход', 'после вы
 fill({login: 'olga', password: 'secret2'});
 btn('Войти').click();
 await sleep(1200);
-expect(menu() === 'Договоры, Арендодатели, Арендаторы', 'у пользователя меню: ' + menu());
+expect(menu() === 'Договоры, Арендодатели, Арендаторы, Виды деятельности', 'у пользователя меню: ' + menu());
 expect(document.getElementById('account').textContent.includes('Ольга'), 'в шапке нет имени');
 
 location.hash = '#/password';
